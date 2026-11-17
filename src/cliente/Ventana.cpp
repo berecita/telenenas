@@ -35,6 +35,10 @@ bool Ventana::cargarFuente() {
     candidatas.push_back("/usr/share/fonts/TTF/DejaVuSans.ttf");
     candidatas.push_back("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf");
     candidatas.push_back("/usr/share/fonts/truetype/freefont/FreeSans.ttf");
+    candidatas.push_back("C:/Windows/Fonts/segoeui.ttf");               // Windows
+    candidatas.push_back("C:/Windows/Fonts/arial.ttf");
+    candidatas.push_back("/System/Library/Fonts/Supplemental/Arial.ttf"); // macOS
+    candidatas.push_back("/Library/Fonts/Arial.ttf");
 
     for (const std::string& ruta : candidatas) {
         if (font.loadFromFile(ruta)) {

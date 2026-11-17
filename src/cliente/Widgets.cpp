@@ -190,8 +190,8 @@ void CampoTexto::dibujar(Ventana& ventana) {
         mostrado += "_";
     }
 
-    // Si el texto es mas largo que la caja, se muestra solo el FINAL (lo que
-    // se esta escribiendo), quitando caracteres UTF-8 completos del principio.
+    // Si el texto es mas largo que la caja, se muestra solo el FINAL (lo que se esta
+    // escribiendo), quitando caracteres UTF-8 completos del principio.
     const float disponible = r.width - 20.0f;
     while (mostrado.size() > 1 && ventana.medirTexto(mostrado, 20) > disponible) {
         size_t i = 1;
