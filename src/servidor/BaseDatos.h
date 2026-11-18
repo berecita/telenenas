@@ -25,6 +25,7 @@ struct MensajeGuardado {
     std::string destino;  // solo en directos
     std::string texto;
     std::string fecha;    // "AAAA-MM-DD HH:MM:SS" (hora local del servidor)
+    bool eliminado = false; // solo queda la constancia, nunca el texto original
 };
 
 struct SalaGuardada {      // un grupo o un canal

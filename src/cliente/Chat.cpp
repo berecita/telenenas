@@ -111,6 +111,19 @@ Conversacion& Chat::directo(const string& usuario) {
 
 // Convierte un mensaje en lineas ya ajustadas al ancho de la zona.
 void Chat::agregarLineas(Conversacion& conv, const MensajeVista& m) {
+    if (m.eliminado) {
+        Linea aviso;
+        aviso.principal = m.autor + " eliminó un mensaje";
+        aviso.colorPrincipal = TEXTO_SUAVE;
+        aviso.secundario = m.hora;
+        aviso.colorSecundario = TEXTO_SUAVE;
+        aviso.x = SANGRIA;
+        aviso.xSecundario = SANGRIA + ventana.medirTexto(aviso.principal, TAM_LETRA) + 10.0f;
+        aviso.avatar = m.autor;
+        // idMensaje queda en 0: no se puede volver a eliminar el aviso.
+        conv.lineas.push_back(aviso);
+        return;
+    }
     bool mio = (m.autor == yo);
     float anchoNombre = ventana.medirTexto(m.autor, TAM_LETRA);
 
@@ -155,7 +168,7 @@ void Chat::agregarMensaje(Conversacion& conv, const MensajeVista& m) {
         conv.desplazamiento += static_cast<int>(conv.lineas.size() - antes);
     }
 
-    if (conv.mensajes.size() > MAX_MENSAJES) {
+    if (!conv.historialCompleto && conv.mensajes.size() > MAX_MENSAJES) {
         conv.mensajes.erase(conv.mensajes.begin());
         reconstruir(conv);
     }
@@ -185,7 +198,7 @@ void Chat::procesar(const string& linea) {
     vector<string> c = separarMaximo(linea, 7);
     const string& cmd = c[0];
 
-    if (cmd == "M" && c.size() >= 7) {
+    if ((cmd == "M" && c.size() >= 7) || (cmd == "MD" && c.size() >= 6)) {
         Conversacion* conv = buscar(c[1], c[2]);
 
         long long id = 0;
@@ -203,7 +216,8 @@ void Chat::procesar(const string& linea) {
         m.id = id;
         m.hora = horaLocalCliente(c[4]);
         m.autor = c[5];
-        m.texto = c[6];
+        m.eliminado = (cmd == "MD");
+        m.texto = m.eliminado ? "" : c[6];
         agregarMensaje(*conv, m);
 
     } else if (cmd == "DEL" && c.size() >= 4) {
@@ -214,9 +228,10 @@ void Chat::procesar(const string& linea) {
 
         if (conv == nullptr) return;
 
-        for (auto it = conv->mensajes.begin(); it != conv->mensajes.end(); ++it) {
-            if (it->id == id) {
-                conv->mensajes.erase(it);
+        for (auto& mensaje : conv->mensajes) {
+            if (mensaje.id == id && !mensaje.eliminado) {
+                mensaje.texto.clear(); // eliminar el contenido de la memoria local
+                mensaje.eliminado = true;
                 reconstruir(*conv);
                 break;
             }
@@ -280,11 +295,29 @@ void Chat::procesar(const string& linea) {
         conv.titulo = k[2];
         conv.dueno = k[3];
         conv.unido = (k[4] == "1");
+        conv.historialCompleto = true;
         verUsuario(k[3]);
 
         if (nuevo) {
             ordenCanales.push_back(k[1]);
         }
+
+    } else if (cmd == "CANAL_MIEMBROS_INICIO" && c.size() >= 2) {
+        auto it = canales.find(c[1]);
+        if (it != canales.end() && it->second.dueno == yo) {
+            it->second.miembros.clear();
+            it->second.miembrosCanalCargados = false;
+        }
+    } else if (cmd == "CANAL_MIEMBRO" && c.size() >= 3) {
+        auto it = canales.find(c[1]);
+        if (it != canales.end() && it->second.dueno == yo) {
+            it->second.miembros.push_back(c[2]);
+            verUsuario(c[2]);
+        }
+    } else if (cmd == "CANAL_MIEMBROS_FIN" && c.size() >= 2) {
+        auto it = canales.find(c[1]);
+        if (it != canales.end() && it->second.dueno == yo)
+            it->second.miembrosCanalCargados = true;
 
     } else if ((cmd == "GRUPO_QUITADO" || cmd == "GRUPO_ELIMINADO") && c.size() >= 2) {
         // Si sali, me expulsaron o eliminaron el grupo, no debo conservar su historial.

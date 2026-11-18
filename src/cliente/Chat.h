@@ -40,6 +40,7 @@ struct MensajeVista {
     std::string hora;
     std::string autor;
     std::string texto;
+    bool eliminado = false;
 };
 
 // Una conversacion: el chat general, un directo, un grupo o un canal.
@@ -47,7 +48,9 @@ struct Conversacion {
     std::string id;                    // usuario / id de grupo / id de canal
     std::string titulo;
     std::string dueno;                 // grupos y canales
-    std::vector<std::string> miembros; // grupos
+    std::vector<std::string> miembros; // grupos o lista privada del canal propio
+    bool miembrosCanalCargados = false;
+    bool historialCompleto = false; // canales: guardar todas las entradas recibidas
     bool unido = true;                 // canales: ya me uni?
     bool nuevos = false;               // hay mensajes sin leer
     long long ultimoId = 0;            // para ignorar mensajes repetidos

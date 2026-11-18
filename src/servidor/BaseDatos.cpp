@@ -100,7 +100,23 @@ bool BaseDatos::abrir(const string& ruta) {
         "         (tipo = 'C' AND idCanal IS NOT NULL AND idDestino IS NULL AND idGrupo IS NULL)));"
 
         "CREATE INDEX IF NOT EXISTS idxMensajesSala ON Mensajes(tipo, idGrupo, idCanal, idMensaje);"
-        "CREATE INDEX IF NOT EXISTS idxMensajesDirectos ON Mensajes(idAutor, idDestino);";
+        "CREATE INDEX IF NOT EXISTS idxMensajesDirectos ON Mensajes(idAutor, idDestino);"
+
+        // Una constancia sin texto original. La tabla se crea tambien al abrir
+        // bases de datos existentes; no requiere borrarlas ni modificar su version.
+        "CREATE TABLE IF NOT EXISTS MensajesEliminados ("
+        "  idMensaje INTEGER PRIMARY KEY,"
+        "  tipo CHAR(1) NOT NULL CHECK (tipo IN ('G', 'D', 'R', 'C')) ,"
+        "  idAutor INTEGER NOT NULL,"
+        "  idDestino INTEGER,"
+        "  idGrupo INTEGER,"
+        "  idCanal INTEGER,"
+        "  fechaEnvio DATETIME NOT NULL,"
+        "  FOREIGN KEY (idAutor) REFERENCES Usuarios(idUsuario) ON DELETE CASCADE,"
+        "  FOREIGN KEY (idDestino) REFERENCES Usuarios(idUsuario) ON DELETE CASCADE,"
+        "  FOREIGN KEY (idGrupo) REFERENCES Grupos(idGrupo) ON DELETE CASCADE,"
+        "  FOREIGN KEY (idCanal) REFERENCES Canales(idCanal) ON DELETE CASCADE);"
+        "CREATE INDEX IF NOT EXISTS idxEliminadosSala ON MensajesEliminados(tipo, idGrupo, idCanal, idMensaje);";
 
     char* error = nullptr;
 
@@ -183,6 +199,25 @@ static const char* SELECT_MENSAJE =
     "FROM Mensajes m "
     "JOIN Usuarios ua ON ua.idUsuario = m.idAutor "
     "LEFT JOIN Usuarios ud ON ud.idUsuario = m.idDestino ";
+
+// Recupera constancias de mensajes borrados sin recuperar su contenido.
+static const char* SELECT_ELIMINADO =
+    "SELECT m.idMensaje, m.tipo, "
+    "CASE m.tipo WHEN 'G' THEN 'general' WHEN 'R' THEN CAST(m.idGrupo AS TEXT) "
+    "            WHEN 'C' THEN CAST(m.idCanal AS TEXT) ELSE '' END, "
+    "ua.nombre, COALESCE(ud.nombre, ''), '' AS texto, m.fechaEnvio "
+    "FROM MensajesEliminados m "
+    "JOIN Usuarios ua ON ua.idUsuario = m.idAutor "
+    "LEFT JOIN Usuarios ud ON ud.idUsuario = m.idDestino ";
+
+static void ordenarHistorial(vector<MensajeGuardado>& mensajes, int limite) {
+    sort(mensajes.begin(), mensajes.end(), [](const MensajeGuardado& a, const MensajeGuardado& b) {
+        return a.id < b.id;
+    });
+    if (limite > 0 && mensajes.size() > static_cast<size_t>(limite)) {
+        mensajes.erase(mensajes.begin(), mensajes.end() - limite);
+    }
+}
 
 static MensajeGuardado filaAMensaje(const vector<string>& f) {
     MensajeGuardado m;
@@ -288,7 +323,21 @@ bool BaseDatos::mensaje(long long id, MensajeGuardado& salida) {
 
 bool BaseDatos::borrarMensaje(long long id) {
     lock_guard<mutex> g(mutexBD);
-    return ejec("DELETE FROM Mensajes WHERE idMensaje = ?1", {to_string(id)});
+    if (!ejec("BEGIN IMMEDIATE")) return false;
+
+    // Copiar solo metadatos antes de borrar el texto. Ambas operaciones son atomicas.
+    bool ok = ejec("INSERT INTO MensajesEliminados "
+                   "(idMensaje, tipo, idAutor, idDestino, idGrupo, idCanal, fechaEnvio) "
+                   "SELECT idMensaje, tipo, idAutor, idDestino, idGrupo, idCanal, fechaEnvio "
+                   "FROM Mensajes WHERE idMensaje = ?1", {to_string(id)});
+    ok = ok && sqlite3_changes(db) == 1;
+    if (ok) {
+        ok = ejec("DELETE FROM Mensajes WHERE idMensaje = ?1", {to_string(id)});
+        ok = ok && sqlite3_changes(db) == 1;
+    }
+    if (ok) ok = ejec("COMMIT");
+    if (!ok) ejec("ROLLBACK");
+    return ok;
 }
 
 vector<MensajeGuardado> BaseDatos::historial(const string& ambito, const string& clave, int limite) {
@@ -309,35 +358,54 @@ vector<MensajeGuardado> BaseDatos::historial(const string& ambito, const string&
         return {};
     }
 
-    auto filas = cons(string(SELECT_MENSAJE) + donde + "ORDER BY m.idMensaje DESC LIMIT " + to_string(limite), params);
+    // limite <= 0 significa historial completo, usado por los canales.
+    string finalSQL = "ORDER BY m.idMensaje DESC";
+    if (limite > 0) finalSQL += " LIMIT " + to_string(limite);
+    auto filas = cons(string(SELECT_MENSAJE) + donde + finalSQL, params);
+    auto borrados = cons(string(SELECT_ELIMINADO) + donde + finalSQL, params);
 
     vector<MensajeGuardado> mensajes;
+    mensajes.reserve(filas.size() + borrados.size());
     for (const auto& f : filas) mensajes.push_back(filaAMensaje(f));
-    reverse(mensajes.begin(), mensajes.end()); // del mas viejo al mas nuevo
+    for (const auto& f : borrados) {
+        auto m = filaAMensaje(f);
+        m.eliminado = true;
+        mensajes.push_back(m);
+    }
+    ordenarHistorial(mensajes, limite);
     return mensajes;
 }
 
 vector<MensajeGuardado> BaseDatos::historialDirecto(const string& a, const string& b, int limite) {
     lock_guard<mutex> g(mutexBD);
-    auto filas = cons(string(SELECT_MENSAJE) +
-                      "WHERE m.tipo = 'D' AND ((ua.nombre = ?1 AND ud.nombre = ?2) OR "
-                      "(ua.nombre = ?2 AND ud.nombre = ?1)) "
-                      "ORDER BY m.idMensaje DESC LIMIT " + to_string(limite),
-                      {a, b});
+    string donde = "WHERE m.tipo = 'D' AND ((ua.nombre = ?1 AND ud.nombre = ?2) OR "
+                   "(ua.nombre = ?2 AND ud.nombre = ?1)) ";
+    string finalSQL = "ORDER BY m.idMensaje DESC";
+    if (limite > 0) finalSQL += " LIMIT " + to_string(limite);
+    auto filas = cons(string(SELECT_MENSAJE) + donde + finalSQL, {a, b});
+    auto borrados = cons(string(SELECT_ELIMINADO) + donde + finalSQL, {a, b});
 
     vector<MensajeGuardado> mensajes;
+    mensajes.reserve(filas.size() + borrados.size());
     for (const auto& f : filas) mensajes.push_back(filaAMensaje(f));
-    reverse(mensajes.begin(), mensajes.end());
+    for (const auto& f : borrados) {
+        auto m = filaAMensaje(f);
+        m.eliminado = true;
+        mensajes.push_back(m);
+    }
+    ordenarHistorial(mensajes, limite);
     return mensajes;
 }
 
 vector<string> BaseDatos::companerosDirectos(const string& usuario) {
     lock_guard<mutex> g(mutexBD);
+    // Incluye conversaciones cuyos UNICOS mensajes fueron eliminados.
     auto filas = cons("SELECT DISTINCT CASE WHEN ua.nombre = ?1 THEN ud.nombre ELSE ua.nombre END "
-                      "FROM Mensajes m "
+                      "FROM (SELECT idAutor, idDestino FROM Mensajes WHERE tipo = 'D' "
+                      "UNION ALL SELECT idAutor, idDestino FROM MensajesEliminados WHERE tipo = 'D') m "
                       "JOIN Usuarios ua ON ua.idUsuario = m.idAutor "
                       "JOIN Usuarios ud ON ud.idUsuario = m.idDestino "
-                      "WHERE m.tipo = 'D' AND (ua.nombre = ?1 OR ud.nombre = ?1)",
+                      "WHERE ua.nombre = ?1 OR ud.nombre = ?1",
                       {usuario});
 
     vector<string> nombres;

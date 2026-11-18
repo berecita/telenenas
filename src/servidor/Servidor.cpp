@@ -186,8 +186,9 @@ static bool leerLinea(Sesion& s, string& linea) {
 
 // Linea de mensaje para el cliente. `clave` es la que ve ESE cliente.
 static string lineaMensaje(const MensajeGuardado& m, const string& clave) {
-    return "M|" + m.ambito + "|" + clave + "|" + to_string(m.id) + "|" + fechaInstante(m.fecha) + "|" +
-           m.autor + "|" + m.texto;
+    string cabecera = m.ambito + "|" + clave + "|" + to_string(m.id) + "|" + fechaInstante(m.fecha) + "|" + m.autor;
+    if (m.eliminado) return "MD|" + cabecera; // marca persistente sin texto
+    return "M|" + cabecera + "|" + m.texto;
 }
 
 // ---------------------------------------------------------------------
@@ -354,7 +355,7 @@ bool Servidor::autenticar(const SesionPtr& s) {
 // grupos y canales. (Las fotos las pide el cliente cuando las necesita.)
 void Servidor::enviarEstadoInicial(const SesionPtr& s) {
     const string& yo = s->usuario;
-    const int LIMITE = 50;
+    const int LIMITE = 50; // general, directos y grupos; los canales no tienen limite
 
     for (const auto& m : bd.historial("G", "general", LIMITE)) {
         enviar(s, lineaMensaje(m, "general"));
@@ -380,7 +381,7 @@ void Servidor::enviarEstadoInicial(const SesionPtr& s) {
         enviar(s, "CANAL|" + to_string(c.id) + "|" + c.nombre + "|" + c.dueno + "|" + (unido ? "1" : "0"));
 
         if (unido) {
-            for (const auto& m : bd.historial("C", to_string(c.id), LIMITE)) {
+            for (const auto& m : bd.historial("C", to_string(c.id), 0)) {
                 enviar(s, lineaMensaje(m, to_string(c.id)));
             }
         }
@@ -448,6 +449,9 @@ void Servidor::procesarComando(const SesionPtr& s, const string& linea, bool& sa
     } else if (cmd == "CANAL_UNIR") {
         vector<string> d = separarMaximo(linea, 2);
         if (d.size() >= 2) cmdCanalUnir(s, d[1]);
+    } else if (cmd == "CANAL_MIEMBROS_PEDIR") {
+        vector<string> d = separarMaximo(linea, 2);
+        if (d.size() >= 2) cmdCanalMiembros(s, d[1]);
     } else if (cmd == "BORRAR") {
         vector<string> d = separarMaximo(linea, 2);
         if (d.size() >= 2) cmdBorrar(s, d[1]);
@@ -744,9 +748,30 @@ void Servidor::cmdCanalUnir(const SesionPtr& s, const string& idTexto) {
     enviar(s, "CANAL|" + to_string(id) + "|" + canal.nombre + "|" + canal.dueno + "|1");
 
     // Al unirse ve todo lo que se envio antes al canal.
-    for (const auto& m : bd.historial("C", to_string(id), 50)) {
+    for (const auto& m : bd.historial("C", to_string(id), 0)) {
         enviar(s, lineaMensaje(m, to_string(id)));
     }
+}
+
+// Lista privada: solo el propietario recibe los miembros, tambien desconectados.
+// Una linea por usuario evita superar el limite de bytes si hay muchos suscriptores.
+void Servidor::cmdCanalMiembros(const SesionPtr& s, const string& idTexto) {
+    long long id;
+    SalaGuardada canal;
+    if (!aNumero(idTexto, id) || !bd.canal(id, canal)) {
+        enviar(s, "AVISO|Ese canal no existe.");
+        return;
+    }
+    if (minusculas(canal.dueno) != minusculas(s->usuario)) {
+        enviar(s, "AVISO|Solo el creador puede consultar los miembros del canal.");
+        return;
+    }
+    const string clave = to_string(id);
+    enviar(s, "CANAL_MIEMBROS_INICIO|" + clave);
+    for (const auto& usuario : bd.miembrosCanal(id)) {
+        enviar(s, "CANAL_MIEMBRO|" + clave + "|" + usuario);
+    }
+    enviar(s, "CANAL_MIEMBROS_FIN|" + clave);
 }
 
 void Servidor::cmdCanalEliminar(const SesionPtr& s, const string& idTexto) {

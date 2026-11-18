@@ -59,6 +59,7 @@ private:
     void cmdGrupoEliminar(const SesionPtr& s, const std::string& id);
     void cmdCanalNuevo(const SesionPtr& s, const std::string& nombre);
     void cmdCanalUnir(const SesionPtr& s, const std::string& id);
+    void cmdCanalMiembros(const SesionPtr& s, const std::string& id);
     void cmdCanalEliminar(const SesionPtr& s, const std::string& id);
     void cmdEliminarCuenta(const SesionPtr& s, const std::string& clave, bool& salir);
     void cmdCanalMensaje(const SesionPtr& s, const std::string& id, const std::string& texto);

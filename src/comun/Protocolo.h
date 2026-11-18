@@ -22,6 +22,7 @@
 //    GRUPO_ELIMINAR|idGrupo            solo el dueno borra el grupo y su historial
 //    CANAL_NUEVO|nombre               crea un canal (el creador es el dueño)
 //    CANAL_UNIR|idCanal               se une a un canal
+//    CANAL_MIEMBROS_PEDIR|idCanal      consulta privada, solo el dueno
 //    CANAL_ELIMINAR|idCanal            solo el dueno borra el canal
 //    CUENTA_ELIMINAR|contrasena        borra la cuenta propia tras revalidar clave
 //    CMSG|idCanal|texto               mensaje a un canal (solo el dueño)
@@ -40,12 +41,16 @@
 //          clave : "general" / el OTRO usuario / id de grupo / id de canal
 //    GRUPO|id|nombre|dueno|m1,m2,...
 //    CANAL|id|nombre|dueno|unido(0/1)
+//    CANAL_MIEMBROS_INICIO|id         empieza la lista privada de suscriptores
+//    CANAL_MIEMBRO|id|usuario         un suscriptor (una linea por persona)
+//    CANAL_MIEMBROS_FIN|id            termino la lista
+//    MD|ambito|clave|id|timestampUnix|autor  constancia de mensaje borrado
 //    GRUPO_QUITADO|id                 receptor expulsado o que abandono el grupo
 //    GRUPO_ELIMINADO|id               grupo borrado, eliminarlo de la interfaz
 //    CANAL_ELIMINADO|id               canal borrado, eliminarlo del catalogo
 //    CUENTA_BORRADA|usuario           borrar mensajes y directos de ese usuario
 //    CUENTA_ELIMINADA                 confirmacion a quien borro su propia cuenta
-//    DEL|ambito|clave|id              un mensaje fue eliminado (mismas claves que M)
+//    DEL|ambito|clave|id              reemplazar mensaje por aviso de borrado
 //    FOTO|usuario|perfil              perfil = "" / "animal:gato" / base64
 // =====================================================================
 

@@ -33,7 +33,7 @@ using namespace std;
 enum class Pantalla { LOGIN, CHAT };
 enum class Fase { EDITANDO, CONECTANDO, ESPERANDO };
 enum class Seccion { GENERAL, DIRECTOS, GRUPOS, CANALES };
-enum class Dialogo { NINGUNO, ADMIN_GRUPO, CONFIRMAR, CUENTA };
+enum class Dialogo { NINGUNO, ADMIN_GRUPO, MIEMBROS_CANAL, CONFIRMAR, CUENTA };
 enum class AccionConfirmar { NINGUNA, QUITAR_MIEMBRO, SALIR_GRUPO, ELIMINAR_GRUPO, ELIMINAR_CANAL };
 
 // ---- Paleta rosa (basada en #FF99DC) ----
@@ -305,6 +305,8 @@ int main(int argc, char* argv[]) {
     AccionConfirmar accionConfirmar = AccionConfirmar::NINGUNA;
     string grupoAdministrado, idConfirmar, usuarioConfirmar;
     int scrollMiembros = 0;
+    string canalConsultado;
+    int scrollMiembrosCanal = 0;
     bool confirmarCuenta = false;
 
     CampoTexto campoMensaje("Mensaje", AREA_X, 560, 400, 42);
@@ -331,7 +333,9 @@ int main(int argc, char* argv[]) {
     // Administracion: acciones visibles segun permisos, con dialogos de confirmacion.
     // Botones en el encabezado derecho, lejos de la etiqueta "Mensaje" (y=536).
     Boton botonGestionGrupo("Administrar grupo", 790, 15, 195, 34);
-    Boton botonEliminarCanal("Eliminar canal", 790, 15, 195, 34);
+    // Dos botones independientes, ambos caben en la columna derecha del encabezado.
+    Boton botonVerMiembrosCanal("Ver miembros", 700, 15, 125, 34);
+    Boton botonEliminarCanal("Eliminar canal", 833, 15, 152, 34);
     Boton botonEliminarCuenta("Eliminar cuenta", 15, 515, 160, 40);
     botonEliminarCuenta.setColor(sf::Color(255, 205, 236));
     CampoTexto campoNuevoMiembro("Usuario que deseas agregar", 265, 424, 325, 40);
@@ -580,7 +584,8 @@ int main(int argc, char* argv[]) {
                 return vector<CampoTexto*>{&campoNuevoMiembro};
             return vector<CampoTexto*>{};
         }
-        if (dialogo == Dialogo::CONFIRMAR) return vector<CampoTexto*>{};
+        if (dialogo == Dialogo::CONFIRMAR || dialogo == Dialogo::MIEMBROS_CANAL)
+            return vector<CampoTexto*>{};
         vector<CampoTexto*> v = {&campoMensaje};
         if (seccion == Seccion::GRUPOS && modoGrupo) v.push_back(&campoNombreGrupo);
         if (seccion == Seccion::CANALES) v.push_back(&campoNombreCanal);
@@ -667,6 +672,12 @@ int main(int argc, char* argv[]) {
                         scrollMiembros = max(0, min(static_cast<int>(it->second.miembros.size()) - 5,
                             scrollMiembros - (e.mouseWheelScroll.delta > 0 ? 1 : -1)));
                     }
+                } else if (e.type == sf::Event::MouseWheelScrolled && dialogo == Dialogo::MIEMBROS_CANAL) {
+                    auto it = chat->canales.find(canalConsultado);
+                    if (it != chat->canales.end()) {
+                        scrollMiembrosCanal = max(0, min(max(0, static_cast<int>(it->second.miembros.size()) - 7),
+                            scrollMiembrosCanal - (e.mouseWheelScroll.delta > 0 ? 1 : -1)));
+                    }
                 } else if (e.type == sf::Event::MouseButtonPressed && e.mouseButton.button == sf::Mouse::Left) {
                     float mx = static_cast<float>(e.mouseButton.x);
                     float my = static_cast<float>(e.mouseButton.y);
@@ -697,6 +708,8 @@ int main(int argc, char* argv[]) {
                                                    g.miembros[static_cast<size_t>(fila)]);
                             }
                         }
+                    } else if (dialogo == Dialogo::MIEMBROS_CANAL) {
+                        if (botonCerrarDialogo.contiene(mx, my)) dialogo = Dialogo::NINGUNO;
                     } else if (dialogo == Dialogo::CONFIRMAR) {
                         if (botonConfirmarNo.contiene(mx, my)) {
                             dialogo = (accionConfirmar == AccionConfirmar::QUITAR_MIEMBRO ||
@@ -839,9 +852,17 @@ int main(int argc, char* argv[]) {
                     enfocar(camposChat, nullptr);
                     campoNuevoMiembro.setEnfocado(true);
                 }
-                if (seccion == Seccion::CANALES && conv && conv->dueno == chat->yo &&
-                    botonEliminarCanal.contiene(mx, my)) {
-                    abrirConfirmacion(AccionConfirmar::ELIMINAR_CANAL, conv->id);
+                if (seccion == Seccion::CANALES && conv && conv->dueno == chat->yo) {
+                    if (botonVerMiembrosCanal.contiene(mx, my)) {
+                        canalConsultado = conv->id;
+                        scrollMiembrosCanal = 0;
+                        conv->miembros.clear();
+                        conv->miembrosCanalCargados = false;
+                        dialogo = Dialogo::MIEMBROS_CANAL;
+                        conexion.enviar("CANAL_MIEMBROS_PEDIR|" + conv->id);
+                    } else if (botonEliminarCanal.contiene(mx, my)) {
+                        abrirConfirmacion(AccionConfirmar::ELIMINAR_CANAL, conv->id);
+                    }
                 }
 
                 if (seccion == Seccion::CANALES && conv && !conv->unido && botonUnirse.contiene(mx, my)) {
@@ -875,7 +896,8 @@ int main(int argc, char* argv[]) {
                 selGrupo.clear(); selCanal.clear(); selDirecto.clear();
             } else {
                 chat->procesar(linea);
-                if (dialogo == Dialogo::ADMIN_GRUPO && !chat->grupos.count(grupoAdministrado))
+                if ((dialogo == Dialogo::ADMIN_GRUPO && !chat->grupos.count(grupoAdministrado)) ||
+                    (dialogo == Dialogo::MIEMBROS_CANAL && !chat->canales.count(canalConsultado)))
                     dialogo = Dialogo::NINGUNO;
             }
         }
@@ -1094,8 +1116,9 @@ int main(int argc, char* argv[]) {
             bool hayAccionSala = conexion.estaActiva() && conv &&
                 (seccion == Seccion::GRUPOS || (seccion == Seccion::CANALES && conv->dueno == c.yo));
             if (hayAccionSala) {
-                titulo = acortarTexto(ventana, titulo, 24, 350.0f);
-                subtitulo = acortarTexto(ventana, subtitulo, 13, 350.0f);
+                const float maxTexto = (seccion == Seccion::CANALES) ? 260.0f : 350.0f;
+                titulo = acortarTexto(ventana, titulo, 24, maxTexto);
+                subtitulo = acortarTexto(ventana, subtitulo, 13, maxTexto);
             }
             ventana.dibujarTexto(titulo, AREA_X, 14, 24, TEXTO_OSCURO);
             ventana.dibujarTexto(subtitulo, AREA_X, 44, 13, TEXTO_SUAVE);
@@ -1106,7 +1129,9 @@ int main(int argc, char* argv[]) {
                 botonGestionGrupo.dibujar(ventana);
             }
             if (conexion.estaActiva() && seccion == Seccion::CANALES && conv && conv->dueno == c.yo) {
+                botonVerMiembrosCanal.actualizarHover(mx, my);
                 botonEliminarCanal.actualizarHover(mx, my);
+                botonVerMiembrosCanal.dibujar(ventana);
                 botonEliminarCanal.dibujar(ventana);
             }
 
@@ -1245,6 +1270,31 @@ int main(int argc, char* argv[]) {
                             botonSalirDelGrupo.actualizarHover(mx, my);
                             botonSalirDelGrupo.dibujar(ventana);
                         }
+                        botonCerrarDialogo.actualizarHover(mx, my);
+                        botonCerrarDialogo.dibujar(ventana);
+                    }
+                } else if (dialogo == Dialogo::MIEMBROS_CANAL) {
+                    auto it = c.canales.find(canalConsultado);
+                    if (it != c.canales.end() && it->second.dueno == c.yo) {
+                        const Conversacion& canal = it->second;
+                        rectangulo(ventana, 230, 100, 580, 440, FONDO);
+                        ventana.dibujarTexto("Miembros de: " + canal.titulo, 265, 120, 21, TEXTO_OSCURO);
+                        ventana.dibujarTexto("Esta lista solo es visible para el creador.", 265, 157, 14, TEXTO_SUAVE);
+                        const string estado = canal.miembrosCanalCargados ?
+                            to_string(canal.miembros.size()) + " integrantes (incluyendote)" : "Consultando integrantes...";
+                        ventana.dibujarTexto(estado, 265, 182, 14, TEXTO_OSCURO);
+                        rectangulo(ventana, 258, 211, 518, 245, sf::Color::White);
+                        scrollMiembrosCanal = max(0, min(scrollMiembrosCanal,
+                            max(0, static_cast<int>(canal.miembros.size()) - 7)));
+                        for (int j = 0; j < 7 && j + scrollMiembrosCanal < static_cast<int>(canal.miembros.size()); ++j) {
+                            const string& u = canal.miembros[static_cast<size_t>(j + scrollMiembrosCanal)];
+                            float y = 218.0f + j * 33.0f;
+                            c.avatares.dibujar(ventana, u, 269, y, 26);
+                            ventana.dibujarTexto(u + (u == canal.dueno ? " (creador)" : ""),
+                                                 308, y + 2, 16, TEXTO_OSCURO);
+                        }
+                        if (canal.miembrosCanalCargados && canal.miembros.size() > 7)
+                            ventana.dibujarTexto("Rueda del mouse para ver más integrantes", 265, 462, 12, TEXTO_SUAVE);
                         botonCerrarDialogo.actualizarHover(mx, my);
                         botonCerrarDialogo.dibujar(ventana);
                     }

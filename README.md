@@ -56,6 +56,7 @@ Esquema (tipos de datos estándar; las llaves foráneas están activadas):
 |---|---|
 | `Usuarios` | `idUsuario`, `nombre VARCHAR(16)`, `sal CHAR(32)`, `hashClave CHAR(64)`, `avatar`, `foto`, `fechaRegistro DATETIME` |
 | `Mensajes` | `idMensaje`, `tipo` (G/D/R/C), `idAutor`, `idDestino`, `idGrupo`, `idCanal`, `texto VARCHAR(500)`, `fechaEnvio DATETIME` |
+| `MensajesEliminados` | `idMensaje`, `tipo`, `idAutor`, `idDestino`, `idGrupo`, `idCanal`, `fechaEnvio` (sin texto original). Se crea automáticamente al iniciar el servidor incluso con una BD existente. |
 | `Grupos` / `GrupoMiembros` | `idGrupo`, `nombre`, `idDueno`, `fechaCreacion` / `idGrupo`, `idUsuario`, `fechaUnion` |
 | `Canales` / `CanalMiembros` | `idCanal`, `nombre` (único), `idDueno`, `fechaCreacion` / `idCanal`, `idUsuario`, `fechaUnion` |
 
@@ -97,15 +98,16 @@ Ejecutar (el ejecutable queda en `build/` o en `build/Release/`):
 2. **Registrarme**: usuario (máx. 16 caracteres), contraseña (mín. 4) y, si quieres, un perfil: **haz clic en uno de los 5 animalitos** (otro clic lo quita) o escribe la **ruta de una imagen propia** (png, jpg, bmp, tga), que se recorta a cuadrado y se reduce a 64×64. Si pones ruta, esa foto tiene prioridad. En Windows puedes usar «Copiar como ruta» y pegar con `Ctrl+V`.
 3. **Entrar**: usuario y contraseña (la foto ya no hace falta).
 4. Usa las secciones de la izquierda. `Enter` envía; rueda del mouse, `PgUp/PgDn` y `End` mueven el historial.
-5. **Eliminar un mensaje tuyo:** pasa el mouse sobre su nombre y pulsa «eliminar»; pide confirmación con un segundo clic («¿seguro?»).
-6. **Administrar un grupo:** entra a **Grupos**, selecciona uno y pulsa **Administrar grupo**, entre el chat y el cuadro de mensaje. El propietario puede escribir el nombre de un usuario en **Agregar** (aunque esté desconectado), o pulsar **Quitar** junto a un miembro. Los demás integrantes pueden pulsar **Salir del grupo**. Usa la rueda del mouse para desplazarte si hay más de cinco integrantes.
+5. **Eliminar un mensaje tuyo:** pasa el mouse sobre su nombre y pulsa «eliminar»; pide confirmación con un segundo clic («¿seguro?»). El contenido desaparece y se muestra **«usuario eliminó un mensaje»** a los participantes. La constancia también se ve al iniciar sesión otra vez; nunca almacena el contenido borrado.
+6. **Administrar un grupo:** entra a **Grupos**, selecciona uno y pulsa **Administrar grupo** en la esquina superior derecha del encabezado. El propietario puede escribir el nombre de un usuario en **Agregar** (aunque esté desconectado), o pulsar **Quitar** junto a un miembro. Los demás integrantes pueden pulsar **Salir del grupo**. Usa la rueda del mouse para desplazarte si hay más de cinco integrantes.
 7. **Eliminar un grupo:** el creador abre **Administrar grupo** y pulsa **Eliminar grupo**; la aplicación solicita confirmación. El creador no puede abandonar su propio grupo: debe eliminarlo.
-8. **Eliminar un canal:** el creador selecciona su canal y pulsa **Eliminar canal**; la aplicación solicita confirmación.
-9. **Eliminar tu cuenta:** pulsa **Eliminar cuenta** en la barra rosa izquierda. Ingresa tu contraseña, pulsa **Eliminar mi cuenta** y confirma pulsando de nuevo. Al confirmarlo el servidor, vuelves a la pantalla de acceso. **Esta operación es irreversible.**
+8. **Ver integrantes de un canal:** su creador selecciona el canal y pulsa **Ver miembros** en la esquina superior derecha. La lista incluye a quienes están desconectados y se puede recorrer con la rueda del mouse. Solo el dueño puede solicitarla; otros usuarios no ven ni reciben estos nombres.
+9. **Eliminar un canal:** el creador selecciona su canal y pulsa **Eliminar canal**; la aplicación solicita confirmación.
+10. **Eliminar tu cuenta:** pulsa **Eliminar cuenta** en la barra rosa izquierda. Ingresa tu contraseña, pulsa **Eliminar mi cuenta** y confirma pulsando de nuevo. Al confirmarlo el servidor, vuelves a la pantalla de acceso. **Esta operación es irreversible.**
 
 ## Protocolo
 
-Un mensaje es una línea de texto terminada en `\n`, con campos separados por `|` (el último campo puede llevar `|`). La referencia completa está en `src/comun/Protocolo.h`.
+Un mensaje es una línea de texto terminada en `\n`, con campos separados por `|` (el último campo puede llevar `|`). La referencia completa está en `src/comun/Protocolo.h`. En **Canales**, tanto al unirte como al volver a entrar se carga **todo el historial disponible**, sin los topes anteriores de 50 mensajes del servidor ni 600 del cliente. Los demás chats conservan su ventana de historial habitual de 50 mensajes de carga inicial.
 
 | Cliente → servidor | Servidor → cliente |
 |---|---|
@@ -115,8 +117,9 @@ Un mensaje es una línea de texto terminada en `\n`, con campos separados por `|
 | `GRUPO_AGREGAR\|id\|usuario`, `GRUPO_QUITAR\|id\|usuario`, `GRUPO_SALIR\|id`, `GRUPO_ELIMINAR\|id` | `GRUPO_QUITADO\|id`, `GRUPO_ELIMINADO\|id`, `GRUPO\|...` (lista actualizada) |
 | `CANAL_NUEVO\|nombre`, `CANAL_UNIR\|id`, `CMSG\|id\|texto` | `CANAL\|id\|nombre\|dueño\|unido` |
 | `CANAL_ELIMINAR\|id` | `CANAL_ELIMINADO\|id` |
+| `CANAL_MIEMBROS_PEDIR\|id` | `CANAL_MIEMBROS_INICIO\|id`, `CANAL_MIEMBRO\|id\|usuario`, `CANAL_MIEMBROS_FIN\|id` (solo al propietario) |
 | `CUENTA_ELIMINAR\|contraseña` | `CUENTA_BORRADA\|usuario`, `CUENTA_ELIMINADA` |
-| `BORRAR\|idMensaje`, `SALIR` | `DEL\|ámbito\|clave\|id` |
+| `BORRAR\|idMensaje`, `SALIR` | `DEL\|ámbito\|clave\|id`; en historiales `MD\|ámbito\|clave\|id\|hora\|autor` |
 | `FOTO_PEDIR\|usuario` | `FOTO\|usuario\|perfil` (vacío, `animal:gato` o base64), `USERS\|a,b`, `AVISO\|texto` |
 
 ## Seguridad y límites
@@ -150,3 +153,11 @@ MIT (ver `LICENSE`). La fuente DejaVu Sans conserva su propia licencia (`recurso
 - La hora de cada mensaje se calcula en el **cliente** según la zona horaria del equipo: `HH:MM` para hoy y `DD/MM HH:MM` para días anteriores. Si el servidor está en UTC y el cliente en México, se verá la hora de México.
 - **Hay que actualizar ambos ejecutables:** recompilar el servidor Linux con `make` y el cliente Windows con `compilar_windows.cmd`. Si se conecta el cliente nuevo a un servidor viejo, los mensajes viejos con el formato anterior seguirán apareciendo, pero no se corregirá su zona horaria hasta actualizar el servidor.
 - Las fechas almacenadas anteriormente siguen siendo legibles; no se borra ni recrea `chat-v2.db`. Se supone que el servidor ejecuta con la misma zona horaria con que se guardaron esos registros.
+
+### Pruebas de las funciones nuevas
+
+```bash
+python3 pruebas/prueba_canales_historial.py ./servidor
+```
+
+Se prueban permisos de lista de miembros, 625 mensajes de canal, constancias de borrado persistentes y recuperación del historial completo con SQLite temporal.
