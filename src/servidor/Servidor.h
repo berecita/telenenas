@@ -53,8 +53,14 @@ private:
     void cmdDirecto(const SesionPtr& s, const std::string& destino, const std::string& texto);
     void cmdGrupoNuevo(const SesionPtr& s, const std::string& nombre, const std::string& miembros);
     void cmdGrupoMensaje(const SesionPtr& s, const std::string& id, const std::string& texto);
+    void cmdGrupoAgregar(const SesionPtr& s, const std::string& id, const std::string& usuario);
+    void cmdGrupoQuitar(const SesionPtr& s, const std::string& id, const std::string& usuario);
+    void cmdGrupoSalir(const SesionPtr& s, const std::string& id);
+    void cmdGrupoEliminar(const SesionPtr& s, const std::string& id);
     void cmdCanalNuevo(const SesionPtr& s, const std::string& nombre);
     void cmdCanalUnir(const SesionPtr& s, const std::string& id);
+    void cmdCanalEliminar(const SesionPtr& s, const std::string& id);
+    void cmdEliminarCuenta(const SesionPtr& s, const std::string& clave, bool& salir);
     void cmdCanalMensaje(const SesionPtr& s, const std::string& id, const std::string& texto);
     void cmdBorrar(const SesionPtr& s, const std::string& id);
     void cmdFoto(const SesionPtr& s, const std::string& usuario);

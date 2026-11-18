@@ -61,6 +61,7 @@ public:
                       std::string& sal, std::string& hash);
     std::string nombreCanonico(const std::string& nombre); // "" si no existe
     bool perfil(const std::string& nombre, std::string& avatar, std::string& foto);
+    bool eliminarCuenta(const std::string& usuario); // elimina tambien sus salas mediante CASCADE
 
     // ---- mensajes ----
     // Guarda el mensaje y rellena m.id y m.fecha (la fecha la pone la base de datos).
@@ -78,6 +79,9 @@ public:
     std::vector<SalaGuardada> gruposDe(const std::string& usuario);
     std::vector<std::string> miembrosGrupo(long long id);
     bool esMiembroGrupo(long long id, const std::string& usuario);
+    bool agregarMiembroGrupo(long long id, const std::string& dueno, const std::string& nuevo);
+    bool quitarMiembroGrupo(long long id, const std::string& solicitante, const std::string& miembro);
+    bool eliminarGrupo(long long id, const std::string& dueno);
 
     // ---- canales ----
     long long crearCanal(const std::string& nombre, const std::string& dueno); // -1 si el nombre ya existe
@@ -86,6 +90,7 @@ public:
     bool unirCanal(long long id, const std::string& usuario);
     std::vector<std::string> miembrosCanal(long long id);
     bool esMiembroCanal(long long id, const std::string& usuario);
+    bool eliminarCanal(long long id, const std::string& dueno);
 };
 
 #endif

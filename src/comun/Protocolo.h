@@ -16,8 +16,14 @@
 //    DM|destino|texto                 mensaje directo
 //    GRUPO_NUEVO|nombre|m1,m2,...     crea un grupo con esos miembros
 //    GMSG|idGrupo|texto               mensaje a un grupo
+//    GRUPO_AGREGAR|idGrupo|usuario     el dueno agrega un miembro (tambien desconectado)
+//    GRUPO_QUITAR|idGrupo|usuario      el dueno retira un miembro
+//    GRUPO_SALIR|idGrupo               un integrante sale (no el dueno)
+//    GRUPO_ELIMINAR|idGrupo            solo el dueno borra el grupo y su historial
 //    CANAL_NUEVO|nombre               crea un canal (el creador es el dueño)
 //    CANAL_UNIR|idCanal               se une a un canal
+//    CANAL_ELIMINAR|idCanal            solo el dueno borra el canal
+//    CUENTA_ELIMINAR|contrasena        borra la cuenta propia tras revalidar clave
 //    CMSG|idCanal|texto               mensaje a un canal (solo el dueño)
 //    BORRAR|idMensaje                 elimina un mensaje PROPIO (para todos)
 //    FOTO_PEDIR|usuario               pide la foto de perfil de alguien
@@ -33,6 +39,11 @@
 //          clave : "general" / el OTRO usuario / id de grupo / id de canal
 //    GRUPO|id|nombre|dueno|m1,m2,...
 //    CANAL|id|nombre|dueno|unido(0/1)
+//    GRUPO_QUITADO|id                 receptor expulsado o que abandono el grupo
+//    GRUPO_ELIMINADO|id               grupo borrado, eliminarlo de la interfaz
+//    CANAL_ELIMINADO|id               canal borrado, eliminarlo del catalogo
+//    CUENTA_BORRADA|usuario           borrar mensajes y directos de ese usuario
+//    CUENTA_ELIMINADA                 confirmacion a quien borro su propia cuenta
 //    DEL|ambito|clave|id              un mensaje fue eliminado (mismas claves que M)
 //    FOTO|usuario|perfil              perfil = "" / "animal:gato" / base64
 // =====================================================================

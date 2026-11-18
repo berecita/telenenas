@@ -7,27 +7,6 @@ Sistema de mensajería instantánea hecho con **sockets TCP** en C++17.
 
 No usa páginas web ni websockets: es TCP puro con un protocolo de texto propio (ver [Protocolo](#protocolo)).
 
-## Ejecutar el cliente después de clonar
-
-```sh
-git clone https://github.com/berecita/telenenas.git
-cd telenenas
-```
-
-Desde la raíz del repositorio, usa el lanzador de tu sistema:
-
-| Sistema | Comando |
-|---|---|
-| Windows (PowerShell) | `.\dist\windows\Abrir-Telenenas.cmd` |
-| Linux x64 | `./dist/telenenas-linux-x64/Abrir-Telenenas` |
-| macOS con Apple Silicon | `./dist/telenenas-macos-arm64/Abrir-Telenenas` |
-| macOS con Intel | `./dist/telenenas-macos-x64/Abrir-Telenenas` |
-
-Ejecuta el cliente desde un equipo con escritorio gráfico. El servidor del
-equipo debe estar escuchando en `3.149.102.2:3041`. En Linux se requieren
-las bibliotecas gráficas del sistema. Los paquetes de macOS se compilaron
-para macOS 12 o posterior.
-
 ## Funciones
 
 | Sección | Qué hace |
@@ -35,11 +14,14 @@ para macOS 12 o posterior.
 | **Cuenta** | Registro e inicio de sesión con usuario, contraseña y foto de perfil: un **avatar de animalito** (gato, perro, conejo, oso o zorro) o una **foto propia**; ambas son opcionales. |
 | **General** | Chat para todos los conectados; cada mensaje muestra el nombre y la foto de quien lo envía. |
 | **Directos** | Eliges a un usuario y chateas en privado. Si no está conectado, recibe el mensaje al volver. |
-| **Grupos** | Creas un grupo con nombre y eliges a los miembros conectados; sus mensajes solo los ven ellos. |
+| **Grupos** | Creas un grupo con nombre y eliges a los miembros conectados; sus mensajes solo los ven ellos. El creador puede añadir miembros existentes (aunque estén desconectados), quitar miembros y eliminar el grupo. Otros miembros pueden abandonarlo. |
 | **Eliminar** | Puedes eliminar tus propios mensajes en cualquier conversación (se borran para todos y de la base de datos). |
-| **Canales** | Creas un canal de difusión (queda registrado en el servidor). Cualquiera puede ver la lista y unirse: al unirse ve **todo el historial** pero **solo el dueño puede escribir**. |
+| **Canales** | Creas un canal de difusión (queda registrado en el servidor). Cualquiera puede ver la lista y unirse: al unirse ve **todo el historial** pero **solo el dueño puede escribir**. El creador puede eliminarlo definitivamente. |
 
 El historial de todas las conversaciones se guarda en la base de datos y se recupera al iniciar sesión.
+
+- **Eliminar cuenta:** cada usuario puede borrar su propia cuenta tras confirmar su contraseña. Se borran sus mensajes, grupos y canales creados (con sus historias y membresías); los grupos y canales de otras personas permanecen.
+- **Las eliminaciones y los cambios de miembros se comunican a los clientes conectados** y se reflejan en SQLite; no hace falta reiniciar sesión.
 
 ## Estructura
 
@@ -94,6 +76,8 @@ cmake -S . -B build -DBUILD_SERVIDOR=OFF
 cmake --build build --config Release
 ```
 
+**Importante sobre los ejecutables:** esta entrega contiene el servidor recompilado para **Linux** y el **código fuente actualizado del cliente**. Los ejecutables antiguos del cliente (incluido el `.exe` de Windows de la entrega original) fueron retirados para evitar que se abra por error una versión sin las nuevas funciones. Para Windows puedes ejecutar `compilar_windows.cmd` desde una terminal con CMake y un compilador C++ instalados; el primer compilado requiere Internet para obtener SFML 2.6.1 si no la tienes instalada.
+
 **Dependencias del sistema**
 
 - **Linux:** `sudo apt install cmake build-essential git libx11-dev libxrandr-dev libxcursor-dev libudev-dev libfreetype-dev libgl1-mesa-dev` (o `libsfml-dev` si prefieres la SFML del sistema, versión 2.x).
@@ -114,6 +98,10 @@ Ejecutar (el ejecutable queda en `build/` o en `build/Release/`):
 3. **Entrar**: usuario y contraseña (la foto ya no hace falta).
 4. Usa las secciones de la izquierda. `Enter` envía; rueda del mouse, `PgUp/PgDn` y `End` mueven el historial.
 5. **Eliminar un mensaje tuyo:** pasa el mouse sobre su nombre y pulsa «eliminar»; pide confirmación con un segundo clic («¿seguro?»).
+6. **Administrar un grupo:** entra a **Grupos**, selecciona uno y pulsa **Administrar grupo**, entre el chat y el cuadro de mensaje. El propietario puede escribir el nombre de un usuario en **Agregar** (aunque esté desconectado), o pulsar **Quitar** junto a un miembro. Los demás integrantes pueden pulsar **Salir del grupo**. Usa la rueda del mouse para desplazarte si hay más de cinco integrantes.
+7. **Eliminar un grupo:** el creador abre **Administrar grupo** y pulsa **Eliminar grupo**; la aplicación solicita confirmación. El creador no puede abandonar su propio grupo: debe eliminarlo.
+8. **Eliminar un canal:** el creador selecciona su canal y pulsa **Eliminar canal**; la aplicación solicita confirmación.
+9. **Eliminar tu cuenta:** pulsa **Eliminar cuenta** en la barra rosa izquierda. Ingresa tu contraseña, pulsa **Eliminar mi cuenta** y confirma pulsando de nuevo. Al confirmarlo el servidor, vuelves a la pantalla de acceso. **Esta operación es irreversible.**
 
 ## Protocolo
 
@@ -124,7 +112,10 @@ Un mensaje es una línea de texto terminada en `\n`, con campos separados por `|
 | `REGISTRO\|usuario\|clave\|foto` / `LOGIN\|usuario\|clave` | `OK\|usuario` / `ERR\|motivo` |
 | `GENERAL\|texto`, `DM\|destino\|texto` | `M\|ámbito\|clave\|id\|hora\|autor\|texto` |
 | `GRUPO_NUEVO\|nombre\|m1,m2`, `GMSG\|id\|texto` | `GRUPO\|id\|nombre\|dueño\|miembros` |
+| `GRUPO_AGREGAR\|id\|usuario`, `GRUPO_QUITAR\|id\|usuario`, `GRUPO_SALIR\|id`, `GRUPO_ELIMINAR\|id` | `GRUPO_QUITADO\|id`, `GRUPO_ELIMINADO\|id`, `GRUPO\|...` (lista actualizada) |
 | `CANAL_NUEVO\|nombre`, `CANAL_UNIR\|id`, `CMSG\|id\|texto` | `CANAL\|id\|nombre\|dueño\|unido` |
+| `CANAL_ELIMINAR\|id` | `CANAL_ELIMINADO\|id` |
+| `CUENTA_ELIMINAR\|contraseña` | `CUENTA_BORRADA\|usuario`, `CUENTA_ELIMINADA` |
 | `BORRAR\|idMensaje`, `SALIR` | `DEL\|ámbito\|clave\|id` |
 | `FOTO_PEDIR\|usuario` | `FOTO\|usuario\|perfil` (vacío, `animal:gato` o base64), `USERS\|a,b`, `AVISO\|texto` |
 
@@ -132,49 +123,21 @@ Un mensaje es una línea de texto terminada en `\n`, con campos separados por `|
 
 - Las contraseñas se guardan **con sal y SHA-256 repetido 5000 veces**, nunca en claro.
 - Todas las consultas SQL son preparadas (sin inyección SQL) y la base de datos hace cumplir sus propias reglas (llaves foráneas y `CHECK`).
-- El servidor valida todo: solo miembros escriben en grupos, solo el dueño en su canal y solo el autor elimina un mensaje; el cliente no decide los permisos.
+- El servidor valida todo: solo miembros escriben en grupos, solo el dueño en su canal y solo el autor elimina un mensaje; el cliente no decide los permisos. Solo el dueño agrega, quita o elimina salas; los participantes pueden salirse de grupos ajenos. Para borrar la cuenta se comprueba de nuevo la contraseña. Las modificaciones de miembros/propietarios se autorizan en SQL y se reflejan en vivo.
 - **Limitación:** no hay cifrado (TLS); usuario y contraseña viajan en claro por la red. Es una práctica de sockets, no un sistema para producción.
 - Cada mensaje admite hasta 500 bytes. El servidor atiende un hilo por cliente.
 
 ## Pruebas
 
-`pruebas/prueba_servidor.py` levanta un servidor temporal y comprueba (61 verificaciones) registro, login, avatares, permisos, historial, eliminación de mensajes, formato de fechas, integridad de la base de datos e inyección SQL:
+`pruebas/prueba_servidor.py` levanta un servidor temporal y comprueba (61 verificaciones) registro, login, avatares, permisos, historial, eliminación de mensajes, formato de fechas, integridad de la base de datos e inyección SQL.
+
+`pruebas/prueba_administracion.py` comprueba 45 escenarios adicionales de permisos, alta/baja de miembros, historial, salida de grupos, eliminación de salas y cuenta y cascadas de SQLite. Usa una **base de datos temporal**, nunca el archivo `chat-v2.db`:
 
 ```bash
 python3 pruebas/prueba_servidor.py ./servidor        # (o ./build/servidor)
+python3 pruebas/prueba_administracion.py ./servidor  # (o ./build/servidor)
 ```
 
 ## Licencia
 
 MIT (ver `LICENSE`). La fuente DejaVu Sans conserva su propia licencia (`recursos/LICENSE-DejaVu.txt`).
-
-## Regenerar ejecutables para Linux y macOS
-
-En GitHub, abre **Actions → Clientes Linux y macOS → Run workflow**. Al
-terminar, descarga el paquete correspondiente desde **Artifacts**.
-
-| Paquete | Equipo |
-|---|---|
-| `telenenas-linux-x64` | Ubuntu 22.04 o distribución compatible en x86-64 con sesión gráfica |
-| `telenenas-macos-arm64` | Mac con Apple Silicon, macOS 12 o posterior |
-| `telenenas-macos-x64` | Mac Intel, macOS 12 o posterior |
-
-Extrae el ZIP de GitHub y luego el archivo `.tar.gz` que contiene. Desde la
-terminal, entra en la carpeta extraída y ejecuta:
-
-```sh
-./Abrir-Telenenas
-```
-
-El lanzador usa el servidor de la práctica en `3.149.102.2:3041`. Si necesitan
-otra dirección, ejecuten `./Abrir-Telenenas HOST PUERTO`.
-
-En Linux, el binario usa las bibliotecas gráficas del sistema. Si faltan en
-Ubuntu 22.04, instala `libx11-6 libxrandr2 libxcursor1 libudev1 libfreetype6 libgl1`.
-Los paquetes de macOS incluyen FreeType enlazado estáticamente y llevan firma
-ad hoc para la prueba. Si macOS bloquea el binario descargado, un paquete para
-distribución pública sin ese aviso requiere firma con Developer ID y notarización.
-
-Para actualizar los ejecutables incluidos en el repositorio, extrae los paquetes
-verificados en `dist/` y sube esas carpetas al repositorio.
-Cada carpeta debe conservar el ejecutable, el lanzador y los recursos juntos.

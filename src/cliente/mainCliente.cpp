@@ -33,6 +33,8 @@ using namespace std;
 enum class Pantalla { LOGIN, CHAT };
 enum class Fase { EDITANDO, CONECTANDO, ESPERANDO };
 enum class Seccion { GENERAL, DIRECTOS, GRUPOS, CANALES };
+enum class Dialogo { NINGUNO, ADMIN_GRUPO, CONFIRMAR, CUENTA };
+enum class AccionConfirmar { NINGUNA, QUITAR_MIEMBRO, SALIR_GRUPO, ELIMINAR_GRUPO, ELIMINAR_CANAL };
 
 // ---- Paleta rosa (basada en #FF99DC) ----
 static const sf::Color ROSA(255, 153, 220);          // #FF99DC (color principal)
@@ -287,6 +289,11 @@ int main(int argc, char* argv[]) {
     set<string> marcados;
     int scrollLista = 0;
     long long confirmarBorrado = 0; // id del mensaje que esta esperando el 2do clic de "eliminar"
+    Dialogo dialogo = Dialogo::NINGUNO;
+    AccionConfirmar accionConfirmar = AccionConfirmar::NINGUNA;
+    string grupoAdministrado, idConfirmar, usuarioConfirmar;
+    int scrollMiembros = 0;
+    bool confirmarCuenta = false;
 
     CampoTexto campoMensaje("Mensaje", AREA_X, 560, 400, 42);
     campoMensaje.setMaxLongitud(MAX_TEXTO);
@@ -308,6 +315,24 @@ int main(int argc, char* argv[]) {
     botonCancelar.setColor(sf::Color(255, 205, 236));
     Boton botonCrearCanal("Crear canal", LISTA_X, 556, LISTA_ANCHO, 44);
     Boton botonUnirse("Unirme al canal", AREA_X + AREA_ANCHO / 2 - 100, AREA_Y + AREA_ALTO / 2 + 10, 200, 46);
+
+    // Administracion: acciones visibles segun permisos, con dialogos de confirmacion.
+    Boton botonGestionGrupo("Administrar grupo", 435, 524, 190, 30);
+    Boton botonEliminarCanal("Eliminar canal", 435, 524, 175, 30);
+    Boton botonEliminarCuenta("Eliminar cuenta", 15, 515, 160, 40);
+    botonEliminarCuenta.setColor(sf::Color(255, 205, 236));
+    CampoTexto campoNuevoMiembro("Usuario que deseas agregar", 265, 424, 325, 40);
+    campoNuevoMiembro.setMaxLongitud(MAX_NOMBRE_USUARIO);
+    CampoTexto campoClaveEliminar("Confirma con tu contrasena", 305, 315, 390, 44, true);
+    campoClaveEliminar.setMaxLongitud(MAX_CLAVE);
+    Boton botonAgregarMiembro("Agregar", 615, 424, 155, 40);
+    Boton botonSalirDelGrupo("Salir del grupo", 265, 485, 190, 38);
+    Boton botonEliminarGrupo("Eliminar grupo", 265, 485, 190, 38);
+    Boton botonCerrarDialogo("Cerrar", 650, 485, 120, 38);
+    Boton botonConfirmarSi("Confirmar", 360, 365, 130, 42);
+    Boton botonConfirmarNo("Cancelar", 510, 365, 130, 42);
+    Boton botonConfirmarCuenta("Eliminar mi cuenta", 335, 393, 330, 43);
+    Boton botonCancelarCuenta("Cancelar", 425, 455, 150, 40);
 
     // ---------------- acciones ----------------
 
@@ -497,16 +522,52 @@ int main(int argc, char* argv[]) {
         campoNombreCanal.limpiar();
     };
 
+    auto abrirConfirmacion = [&](AccionConfirmar accion, const string& id, const string& usuario = "") {
+        accionConfirmar = accion;
+        idConfirmar = id;
+        usuarioConfirmar = usuario;
+        dialogo = Dialogo::CONFIRMAR;
+    };
+
+    auto confirmarAccion = [&]() {
+        switch (accionConfirmar) {
+            case AccionConfirmar::QUITAR_MIEMBRO:
+                conexion.enviar("GRUPO_QUITAR|" + idConfirmar + "|" + usuarioConfirmar);
+                break;
+            case AccionConfirmar::SALIR_GRUPO:
+                conexion.enviar("GRUPO_SALIR|" + idConfirmar);
+                break;
+            case AccionConfirmar::ELIMINAR_GRUPO:
+                conexion.enviar("GRUPO_ELIMINAR|" + idConfirmar);
+                break;
+            case AccionConfirmar::ELIMINAR_CANAL:
+                conexion.enviar("CANAL_ELIMINAR|" + idConfirmar);
+                break;
+            default: break;
+        }
+        dialogo = Dialogo::NINGUNO;
+        accionConfirmar = AccionConfirmar::NINGUNA;
+    };
+
     auto cambiarSeccion = [&](Seccion nueva) {
         seccion = nueva;
         modoGrupo = false;
         marcados.clear();
         scrollLista = 0;
+        dialogo = Dialogo::NINGUNO;
         enfocar(camposChat, &campoMensaje);
     };
 
     // Campos de texto que estan en pantalla ahora mismo (para Tab, clics y teclas).
     auto camposVisibles = [&]() {
+        if (dialogo == Dialogo::CUENTA) return vector<CampoTexto*>{&campoClaveEliminar};
+        if (dialogo == Dialogo::ADMIN_GRUPO) {
+            auto it = chat->grupos.find(grupoAdministrado);
+            if (it != chat->grupos.end() && it->second.dueno == chat->yo)
+                return vector<CampoTexto*>{&campoNuevoMiembro};
+            return vector<CampoTexto*>{};
+        }
+        if (dialogo == Dialogo::CONFIRMAR) return vector<CampoTexto*>{};
         vector<CampoTexto*> v = {&campoMensaje};
         if (seccion == Seccion::GRUPOS && modoGrupo) v.push_back(&campoNombreGrupo);
         if (seccion == Seccion::CANALES) v.push_back(&campoNombreCanal);
@@ -568,6 +629,92 @@ int main(int argc, char* argv[]) {
             vector<CampoTexto*> visibles = camposVisibles();
             Conversacion* conv = conversacionActual();
 
+            // Los dialogos interceptan los eventos para no tocar accidentalmente el chat.
+            if (dialogo != Dialogo::NINGUNO) {
+                if (pegar) {
+                    pegarEnCampos(visibles);
+                } else if (e.type == sf::Event::TextEntered) {
+                    teclearEnCampos(visibles, e.text.unicode);
+                    if (dialogo == Dialogo::CUENTA) confirmarCuenta = false;
+                } else if (e.type == sf::Event::KeyPressed) {
+                    if (e.key.code == sf::Keyboard::Escape) {
+                        dialogo = Dialogo::NINGUNO;
+                        campoClaveEliminar.limpiar();
+                    } else if (e.key.code == sf::Keyboard::Return && dialogo == Dialogo::ADMIN_GRUPO) {
+                        auto it = chat->grupos.find(grupoAdministrado);
+                        if (it != chat->grupos.end() && it->second.dueno == chat->yo &&
+                            !quitarEspacios(campoNuevoMiembro.getContenido()).empty()) {
+                            conexion.enviar("GRUPO_AGREGAR|" + grupoAdministrado + "|" + quitarEspacios(campoNuevoMiembro.getContenido()));
+                            campoNuevoMiembro.limpiar();
+                        }
+                    }
+                } else if (e.type == sf::Event::MouseWheelScrolled && dialogo == Dialogo::ADMIN_GRUPO) {
+                    auto it = chat->grupos.find(grupoAdministrado);
+                    if (it != chat->grupos.end()) {
+                        scrollMiembros = max(0, min(static_cast<int>(it->second.miembros.size()) - 5,
+                            scrollMiembros - (e.mouseWheelScroll.delta > 0 ? 1 : -1)));
+                    }
+                } else if (e.type == sf::Event::MouseButtonPressed && e.mouseButton.button == sf::Mouse::Left) {
+                    float mx = static_cast<float>(e.mouseButton.x);
+                    float my = static_cast<float>(e.mouseButton.y);
+                    clicEnCampos(visibles, mx, my);
+
+                    if (dialogo == Dialogo::ADMIN_GRUPO) {
+                        auto it = chat->grupos.find(grupoAdministrado);
+                        if (it == chat->grupos.end()) { dialogo = Dialogo::NINGUNO; continue; }
+                        const Conversacion& g = it->second;
+                        bool dueno = (g.dueno == chat->yo);
+                        if (botonCerrarDialogo.contiene(mx, my)) {
+                            dialogo = Dialogo::NINGUNO;
+                        } else if (dueno && botonEliminarGrupo.contiene(mx, my)) {
+                            abrirConfirmacion(AccionConfirmar::ELIMINAR_GRUPO, grupoAdministrado);
+                        } else if (!dueno && botonSalirDelGrupo.contiene(mx, my)) {
+                            abrirConfirmacion(AccionConfirmar::SALIR_GRUPO, grupoAdministrado);
+                        } else if (dueno && botonAgregarMiembro.contiene(mx, my)) {
+                            string nuevo = quitarEspacios(campoNuevoMiembro.getContenido());
+                            if (!nuevo.empty()) {
+                                conexion.enviar("GRUPO_AGREGAR|" + grupoAdministrado + "|" + nuevo);
+                                campoNuevoMiembro.limpiar();
+                            }
+                        } else if (dueno && mx >= 660 && mx < 780 && my >= 215 && my < 385) {
+                            int fila = static_cast<int>((my - 215) / 34) + scrollMiembros;
+                            if (fila >= 0 && fila < static_cast<int>(g.miembros.size()) &&
+                                g.miembros[static_cast<size_t>(fila)] != g.dueno) {
+                                abrirConfirmacion(AccionConfirmar::QUITAR_MIEMBRO, grupoAdministrado,
+                                                   g.miembros[static_cast<size_t>(fila)]);
+                            }
+                        }
+                    } else if (dialogo == Dialogo::CONFIRMAR) {
+                        if (botonConfirmarNo.contiene(mx, my)) {
+                            dialogo = (accionConfirmar == AccionConfirmar::QUITAR_MIEMBRO ||
+                                       accionConfirmar == AccionConfirmar::SALIR_GRUPO ||
+                                       accionConfirmar == AccionConfirmar::ELIMINAR_GRUPO) ? Dialogo::ADMIN_GRUPO : Dialogo::NINGUNO;
+                        } else if (botonConfirmarSi.contiene(mx, my)) {
+                            confirmarAccion();
+                        }
+                    } else if (dialogo == Dialogo::CUENTA) {
+                        if (botonCancelarCuenta.contiene(mx, my)) {
+                            dialogo = Dialogo::NINGUNO;
+                            confirmarCuenta = false;
+                            campoClaveEliminar.limpiar();
+                        } else if (botonConfirmarCuenta.contiene(mx, my)) {
+                            if (campoClaveEliminar.getContenido().empty()) {
+                                chat->aviso = "Escribe tu contrasena para eliminar la cuenta.";
+                                chat->relojAviso.restart();
+                            } else if (!confirmarCuenta) {
+                                confirmarCuenta = true;
+                            } else {
+                                conexion.enviar("CUENTA_ELIMINAR|" + campoClaveEliminar.getContenido());
+                                campoClaveEliminar.limpiar();
+                                confirmarCuenta = false;
+                                dialogo = Dialogo::NINGUNO;
+                            }
+                        }
+                    }
+                }
+                continue;
+            }
+
             if (pegar) {
                 pegarEnCampos(visibles);
 
@@ -621,6 +768,13 @@ int main(int argc, char* argv[]) {
                     if (botonSeccion[i].contiene(mx, my)) cambiarSeccion(static_cast<Seccion>(i));
                 }
                 if (botonSalir.contiene(mx, my)) win.close();
+                if (botonEliminarCuenta.contiene(mx, my) && conexion.estaActiva()) {
+                    dialogo = Dialogo::CUENTA;
+                    confirmarCuenta = false;
+                    campoClaveEliminar.limpiar();
+                    enfocar(camposChat, nullptr);
+                    campoClaveEliminar.setEnfocado(true);
+                }
 
                 // -- lista del medio --
                 if (mx >= LISTA_X && mx < LISTA_X + LISTA_ANCHO && my >= LISTA_Y && my < listaFondo()) {
@@ -664,6 +818,18 @@ int main(int argc, char* argv[]) {
 
                 // -- panel derecho --
                 if (botonEnviar.contiene(mx, my)) enviarTexto();
+                if (seccion == Seccion::GRUPOS && conv && botonGestionGrupo.contiene(mx, my)) {
+                    grupoAdministrado = conv->id;
+                    scrollMiembros = 0;
+                    campoNuevoMiembro.limpiar();
+                    dialogo = Dialogo::ADMIN_GRUPO;
+                    enfocar(camposChat, nullptr);
+                    campoNuevoMiembro.setEnfocado(true);
+                }
+                if (seccion == Seccion::CANALES && conv && conv->dueno == chat->yo &&
+                    botonEliminarCanal.contiene(mx, my)) {
+                    abrirConfirmacion(AccionConfirmar::ELIMINAR_CANAL, conv->id);
+                }
 
                 if (seccion == Seccion::CANALES && conv && !conv->unido && botonUnirse.contiene(mx, my)) {
                     conexion.enviar("CANAL_UNIR|" + conv->id);
@@ -682,8 +848,22 @@ int main(int argc, char* argv[]) {
         while (conexion.siguienteLinea(linea)) {
             if (pantalla == Pantalla::LOGIN) {
                 if (fase == Fase::ESPERANDO) manejarLineaLogin(linea);
+            } else if (linea == "CUENTA_ELIMINADA") {
+                // El servidor ya confirmo el borrado en SQLite.
+                conexion.cerrar();
+                chat.reset();
+                pantalla = Pantalla::LOGIN;
+                fase = Fase::EDITANDO;
+                mensajeLogin = "Tu cuenta se elimino correctamente.";
+                mensajeEsError = false;
+                campoClave.limpiar();
+                campoClaveEliminar.limpiar();
+                dialogo = Dialogo::NINGUNO;
+                selGrupo.clear(); selCanal.clear(); selDirecto.clear();
             } else {
                 chat->procesar(linea);
+                if (dialogo == Dialogo::ADMIN_GRUPO && !chat->grupos.count(grupoAdministrado))
+                    dialogo = Dialogo::NINGUNO;
             }
         }
 
@@ -774,6 +954,7 @@ int main(int argc, char* argv[]) {
 
             botonSalir.actualizarHover(mx, my);
             botonEnviar.actualizarHover(mx, my);
+            botonEliminarCuenta.actualizarHover(mx, my);
 
             // ---- barra lateral ----
             rectangulo(ventana, 0, 0, 190, ALTO, BARRA_LATERAL);
@@ -783,6 +964,7 @@ int main(int argc, char* argv[]) {
                                  conexion.estaActiva() ? VERDE : ROJO_ERROR);
             for (int i = 0; i < 4; i++) botonSeccion[i].dibujar(ventana);
             botonSalir.dibujar(ventana);
+            botonEliminarCuenta.dibujar(ventana);
 
             // ---- lista del medio ----
             rectangulo(ventana, 190, 0, 230, ALTO, PANEL_LISTA);
@@ -897,6 +1079,16 @@ int main(int argc, char* argv[]) {
             ventana.dibujarTexto(titulo, AREA_X, 14, 24, TEXTO_OSCURO);
             ventana.dibujarTexto(subtitulo, AREA_X, 44, 13, TEXTO_SUAVE);
 
+            // Entre la zona de mensajes y la caja de texto hay espacio para administrar salas.
+            if (conexion.estaActiva() && seccion == Seccion::GRUPOS && conv) {
+                botonGestionGrupo.actualizarHover(mx, my);
+                botonGestionGrupo.dibujar(ventana);
+            }
+            if (conexion.estaActiva() && seccion == Seccion::CANALES && conv && conv->dueno == c.yo) {
+                botonEliminarCanal.actualizarHover(mx, my);
+                botonEliminarCanal.dibujar(ventana);
+            }
+
             // ---- zona de mensajes ----
             sf::RectangleShape zona(sf::Vector2f(AREA_ANCHO, AREA_ALTO));
             zona.setPosition(AREA_X, AREA_Y);
@@ -990,6 +1182,92 @@ int main(int argc, char* argv[]) {
 
             if (!c.aviso.empty() && c.relojAviso.getElapsedTime().asSeconds() < 6.0f) {
                 ventana.dibujarTexto(c.aviso, AREA_X, 612, 14, ROJO_ERROR);
+            }
+
+            // Dialogos modales: evitan eliminar algo con un clic no intencional.
+            if (dialogo != Dialogo::NINGUNO) {
+                rectangulo(ventana, 0, 0, ANCHO, ALTO, sf::Color(60, 20, 55, 165));
+                if (dialogo == Dialogo::ADMIN_GRUPO) {
+                    auto it = c.grupos.find(grupoAdministrado);
+                    if (it != c.grupos.end()) {
+                        const Conversacion& g = it->second;
+                        bool dueno = (g.dueno == c.yo);
+                        rectangulo(ventana, 230, 100, 580, 440, FONDO);
+                        ventana.dibujarTexto("Administrar: " + g.titulo, 265, 120, 22, TEXTO_OSCURO);
+                        ventana.dibujarTexto("Creador: " + g.dueno + "  ·  " + to_string(g.miembros.size()) + " miembros",
+                                             265, 156, 15, TEXTO_SUAVE);
+                        ventana.dibujarTexto(dueno ? "Retira miembros con Quitar (no puedes retirarte a ti)." :
+                                             "Puedes ver los integrantes o salir de este grupo.", 265, 185, 13, TEXTO_SUAVE);
+                        rectangulo(ventana, 258, 208, 518, 180, sf::Color::White);
+                        scrollMiembros = max(0, min(scrollMiembros, max(0, static_cast<int>(g.miembros.size()) - 5)));
+                        for (int j = 0; j < 5 && j + scrollMiembros < static_cast<int>(g.miembros.size()); ++j) {
+                            const string& miembro = g.miembros[static_cast<size_t>(j + scrollMiembros)];
+                            float y = 215.0f + j * 34.0f;
+                            c.avatares.dibujar(ventana, miembro, 269, y, 26);
+                            ventana.dibujarTexto(miembro + (miembro == g.dueno ? " (creador)" : ""),
+                                                 307, y + 2, 16, TEXTO_OSCURO);
+                            if (dueno && miembro != g.dueno) {
+                                bool hover = mx >= 660 && mx < 780 && my >= y && my < y + 30;
+                                rectangulo(ventana, 660, y, 112, 29, hover ? SELECCION : PANEL_LISTA);
+                                ventana.dibujarTexto("Quitar", 686, y + 5, 14, ROJO_ERROR);
+                            }
+                        }
+                        if (g.miembros.size() > 5)
+                            ventana.dibujarTexto("Rueda del mouse para ver mas integrantes", 265, 394, 12, TEXTO_SUAVE);
+                        if (dueno) {
+                            campoNuevoMiembro.dibujar(ventana);
+                            botonAgregarMiembro.actualizarHover(mx, my);
+                            botonAgregarMiembro.dibujar(ventana);
+                            botonEliminarGrupo.actualizarHover(mx, my);
+                            botonEliminarGrupo.dibujar(ventana);
+                        } else {
+                            botonSalirDelGrupo.actualizarHover(mx, my);
+                            botonSalirDelGrupo.dibujar(ventana);
+                        }
+                        botonCerrarDialogo.actualizarHover(mx, my);
+                        botonCerrarDialogo.dibujar(ventana);
+                    }
+                } else if (dialogo == Dialogo::CONFIRMAR) {
+                    rectangulo(ventana, 260, 210, 480, 240, FONDO);
+                    string titulo, detalle;
+                    switch (accionConfirmar) {
+                        case AccionConfirmar::QUITAR_MIEMBRO:
+                            titulo = "Quitar a " + usuarioConfirmar + " del grupo?";
+                            detalle = "Dejara de ver los mensajes de ese grupo.";
+                            break;
+                        case AccionConfirmar::SALIR_GRUPO:
+                            titulo = "Abandonar el grupo?";
+                            detalle = "Ya no podras ver sus conversaciones.";
+                            break;
+                        case AccionConfirmar::ELIMINAR_GRUPO:
+                            titulo = "Eliminar este grupo definitivamente?";
+                            detalle = "Se borraran sus mensajes y lista de integrantes.";
+                            break;
+                        case AccionConfirmar::ELIMINAR_CANAL:
+                            titulo = "Eliminar este canal definitivamente?";
+                            detalle = "Se borraran sus mensajes y suscripciones.";
+                            break;
+                        default: break;
+                    }
+                    ventana.dibujarTexto(titulo, 280, 248, 19, TEXTO_OSCURO);
+                    ventana.dibujarTexto(detalle, 280, 291, 15, ROJO_ERROR);
+                    botonConfirmarSi.actualizarHover(mx, my);
+                    botonConfirmarNo.actualizarHover(mx, my);
+                    botonConfirmarSi.dibujar(ventana);
+                    botonConfirmarNo.dibujar(ventana);
+                } else if (dialogo == Dialogo::CUENTA) {
+                    rectangulo(ventana, 250, 165, 500, 335, FONDO);
+                    ventana.dibujarTexto("Eliminar mi cuenta", 305, 190, 25, ROJO_ERROR);
+                    ventana.dibujarTexto("Esta accion es irreversible: se eliminaran", 305, 235, 15, TEXTO_OSCURO);
+                    ventana.dibujarTexto("tus mensajes, grupos y canales creados.", 305, 258, 15, TEXTO_OSCURO);
+                    ventana.dibujarTexto("Escribe tu contrasena para continuar:", 305, 290, 14, TEXTO_SUAVE);
+                    campoClaveEliminar.dibujar(ventana);
+                    botonConfirmarCuenta.setTexto(confirmarCuenta ? "Si, eliminar definitivamente" : "Eliminar mi cuenta");
+                    botonConfirmarCuenta.actualizarHover(mx, my);
+                    botonCancelarCuenta.actualizarHover(mx, my);
+                    botonConfirmarCuenta.dibujar(ventana);
+                    botonCancelarCuenta.dibujar(ventana);
+                }
             }
         }
 

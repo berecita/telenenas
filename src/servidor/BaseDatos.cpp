@@ -240,6 +240,13 @@ bool BaseDatos::perfil(const string& nombre, string& avatar, string& foto) {
     return true;
 }
 
+// La identidad se toma de la sesion autenticada; no de un nombre aportado por el cliente.
+// Las llaves foraneas ON DELETE CASCADE eliminan salas propias, relaciones y mensajes.
+bool BaseDatos::eliminarCuenta(const string& usuario) {
+    lock_guard<mutex> g(mutexBD);
+    return ejec("DELETE FROM Usuarios WHERE nombre = ?1", {usuario}) && sqlite3_changes(db) == 1;
+}
+
 // ---------------------------------------------------------------------
 // Mensajes
 // ---------------------------------------------------------------------
@@ -423,6 +430,36 @@ bool BaseDatos::esMiembroGrupo(long long id, const string& usuario) {
                  "WHERE gm.idGrupo = ?1 AND u.nombre = ?2", {to_string(id), usuario}).empty();
 }
 
+// El permiso se comprueba en la MISMA operacion SQL: no basta con el boton del cliente.
+// sqlite3_changes distingue una insercion real de una invitacion duplicada.
+bool BaseDatos::agregarMiembroGrupo(long long id, const string& dueno, const string& nuevo) {
+    lock_guard<mutex> g(mutexBD);
+    return ejec("INSERT OR IGNORE INTO GrupoMiembros(idGrupo, idUsuario) "
+                "SELECT g.idGrupo, u.idUsuario FROM Grupos g "
+                "JOIN Usuarios d ON d.idUsuario = g.idDueno "
+                "JOIN Usuarios u ON u.nombre = ?3 "
+                "WHERE g.idGrupo = ?1 AND d.nombre = ?2",
+                {to_string(id), dueno, nuevo}) && sqlite3_changes(db) == 1;
+}
+
+bool BaseDatos::quitarMiembroGrupo(long long id, const string& solicitante, const string& miembro) {
+    lock_guard<mutex> g(mutexBD);
+    // El dueno no puede expulsarse, ni abandonar una sala de la cual es propietario.
+    return ejec("DELETE FROM GrupoMiembros WHERE idGrupo = ?1 "
+                "AND idUsuario = (SELECT idUsuario FROM Usuarios WHERE nombre = ?3) "
+                "AND EXISTS (SELECT 1 FROM Grupos g "
+                "JOIN Usuarios d ON d.idUsuario = g.idDueno "
+                "WHERE g.idGrupo = ?1 AND (d.nombre = ?2 OR ?2 = ?3) AND d.nombre <> ?3)",
+                {to_string(id), solicitante, miembro}) && sqlite3_changes(db) == 1;
+}
+
+bool BaseDatos::eliminarGrupo(long long id, const string& dueno) {
+    lock_guard<mutex> g(mutexBD);
+    return ejec("DELETE FROM Grupos WHERE idGrupo = ?1 AND "
+                "idDueno = (SELECT idUsuario FROM Usuarios WHERE nombre = ?2)",
+                {to_string(id), dueno}) && sqlite3_changes(db) == 1;
+}
+
 // ---------------------------------------------------------------------
 // Canales
 // ---------------------------------------------------------------------
@@ -499,4 +536,12 @@ bool BaseDatos::esMiembroCanal(long long id, const string& usuario) {
     lock_guard<mutex> g(mutexBD);
     return !cons("SELECT 1 FROM CanalMiembros cm JOIN Usuarios u ON u.idUsuario = cm.idUsuario "
                  "WHERE cm.idCanal = ?1 AND u.nombre = ?2", {to_string(id), usuario}).empty();
+}
+
+// El propietario es el unico que puede borrar el canal y su historial.
+bool BaseDatos::eliminarCanal(long long id, const string& dueno) {
+    lock_guard<mutex> g(mutexBD);
+    return ejec("DELETE FROM Canales WHERE idCanal = ?1 AND "
+                "idDueno = (SELECT idUsuario FROM Usuarios WHERE nombre = ?2)",
+                {to_string(id), dueno}) && sqlite3_changes(db) == 1;
 }

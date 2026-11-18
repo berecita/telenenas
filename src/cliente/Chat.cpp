@@ -2,6 +2,8 @@
 
 #include "../comun/Protocolo.h"
 
+#include <algorithm>
+
 using namespace std;
 
 static const sf::Color TEXTO_OSCURO(74, 30, 64);
@@ -282,6 +284,41 @@ void Chat::procesar(const string& linea) {
         if (nuevo) {
             ordenCanales.push_back(k[1]);
         }
+
+    } else if ((cmd == "GRUPO_QUITADO" || cmd == "GRUPO_ELIMINADO") && c.size() >= 2) {
+        // Si sali, me expulsaron o eliminaron el grupo, no debo conservar su historial.
+        grupos.erase(c[1]);
+        ordenGrupos.erase(remove(ordenGrupos.begin(), ordenGrupos.end(), c[1]), ordenGrupos.end());
+        aviso = (cmd == "GRUPO_QUITADO") ? "Ya no perteneces a ese grupo." : "Se elimino un grupo.";
+        relojAviso.restart();
+
+    } else if (cmd == "CANAL_ELIMINADO" && c.size() >= 2) {
+        canales.erase(c[1]);
+        ordenCanales.erase(remove(ordenCanales.begin(), ordenCanales.end(), c[1]), ordenCanales.end());
+        aviso = "Se elimino un canal.";
+        relojAviso.restart();
+
+    } else if (cmd == "CUENTA_BORRADA" && c.size() >= 2) {
+        const string& usuario = c[1];
+        // SQLite elimina en cascada todos los mensajes del usuario en todas las salas.
+        // Reflejamos la misma limpieza en las conversaciones abiertas.
+        auto limpiarMensajes = [&](Conversacion& conv) {
+            size_t antes = conv.mensajes.size();
+            conv.mensajes.erase(remove_if(conv.mensajes.begin(), conv.mensajes.end(),
+                                         [&](const MensajeVista& m) { return m.autor == usuario; }),
+                                conv.mensajes.end());
+            if (conv.mensajes.size() != antes) reconstruir(conv);
+        };
+        limpiarMensajes(general);
+        directos.erase(usuario);
+        for (auto& par : directos) limpiarMensajes(par.second);
+        for (auto& par : grupos) {
+            limpiarMensajes(par.second);
+            auto& ms = par.second.miembros;
+            ms.erase(remove(ms.begin(), ms.end(), usuario), ms.end());
+        }
+        for (auto& par : canales) limpiarMensajes(par.second);
+        enLinea.erase(remove(enLinea.begin(), enLinea.end(), usuario), enLinea.end());
 
     } else if (cmd == "FOTO") {
         vector<string> f = separarMaximo(linea, 3);

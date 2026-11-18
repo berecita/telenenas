@@ -453,6 +453,18 @@ void Servidor::procesarComando(const SesionPtr& s, const string& linea, bool& sa
     } else if (cmd == "CANAL_NUEVO") {
         vector<string> d = separarMaximo(linea, 2);
         if (d.size() >= 2) cmdCanalNuevo(s, d[1]);
+    } else if (cmd == "GRUPO_SALIR") {
+        vector<string> d = separarMaximo(linea, 2);
+        if (d.size() >= 2) cmdGrupoSalir(s, d[1]);
+    } else if (cmd == "GRUPO_ELIMINAR") {
+        vector<string> d = separarMaximo(linea, 2);
+        if (d.size() >= 2) cmdGrupoEliminar(s, d[1]);
+    } else if (cmd == "CANAL_ELIMINAR") {
+        vector<string> d = separarMaximo(linea, 2);
+        if (d.size() >= 2) cmdCanalEliminar(s, d[1]);
+    } else if (cmd == "CUENTA_ELIMINAR") {
+        vector<string> d = separarMaximo(linea, 2);
+        if (d.size() >= 2) cmdEliminarCuenta(s, d[1], salir);
     } else if (cmd == "CANAL_UNIR") {
         vector<string> d = separarMaximo(linea, 2);
         if (d.size() >= 2) cmdCanalUnir(s, d[1]);
@@ -468,6 +480,10 @@ void Servidor::procesarComando(const SesionPtr& s, const string& linea, bool& sa
         cmdDirecto(s, c[1], c[2]);
     } else if (cmd == "GRUPO_NUEVO" && c.size() >= 3) {
         cmdGrupoNuevo(s, c[1], c[2]);
+    } else if (cmd == "GRUPO_AGREGAR" && c.size() >= 3) {
+        cmdGrupoAgregar(s, c[1], c[2]);
+    } else if (cmd == "GRUPO_QUITAR" && c.size() >= 3) {
+        cmdGrupoQuitar(s, c[1], c[2]);
     } else if (cmd == "GMSG" && c.size() >= 3) {
         cmdGrupoMensaje(s, c[1], c[2]);
     } else if (cmd == "CMSG" && c.size() >= 3) {
@@ -601,6 +617,105 @@ void Servidor::cmdGrupoMensaje(const SesionPtr& s, const string& idTexto, const 
     enviarAVarios(bd.miembrosGrupo(id), lineaMensaje(m, m.clave));
 }
 
+// Las altas y bajas notifican a los miembros conectados. Un miembro nuevo
+// recibe primero GRUPO y luego el historial para que Chat pueda asociarlo.
+void Servidor::cmdGrupoAgregar(const SesionPtr& s, const string& idTexto, const string& usuarioCrudo) {
+    long long id;
+    SalaGuardada sala;
+    if (!aNumero(idTexto, id) || !bd.grupo(id, sala)) {
+        enviar(s, "AVISO|Ese grupo ya no existe.");
+        return;
+    }
+    if (minusculas(sala.dueno) != minusculas(s->usuario)) {
+        enviar(s, "AVISO|Solo el creador puede agregar miembros.");
+        return;
+    }
+    string nuevo = bd.nombreCanonico(recortar(usuarioCrudo));
+    if (nuevo.empty()) { enviar(s, "AVISO|Ese usuario no existe."); return; }
+    if (bd.esMiembroGrupo(id, nuevo)) { enviar(s, "AVISO|Ese usuario ya pertenece al grupo."); return; }
+    if (!bd.agregarMiembroGrupo(id, s->usuario, nuevo)) {
+        enviar(s, "AVISO|No se pudo agregar al usuario.");
+        return;
+    }
+    vector<string> miembros = bd.miembrosGrupo(id);
+    enviarAVarios(miembros, "GRUPO|" + idTexto + "|" + sala.nombre + "|" + sala.dueno + "|" + unir(miembros));
+    for (const auto& m : bd.historial("R", idTexto, 50)) {
+        enviarA(nuevo, lineaMensaje(m, idTexto));
+    }
+    enviar(s, "AVISO|Se agrego a " + nuevo + " al grupo.");
+}
+
+void Servidor::cmdGrupoQuitar(const SesionPtr& s, const string& idTexto, const string& usuarioCrudo) {
+    long long id;
+    SalaGuardada sala;
+    if (!aNumero(idTexto, id) || !bd.grupo(id, sala)) {
+        enviar(s, "AVISO|Ese grupo ya no existe.");
+        return;
+    }
+    if (minusculas(sala.dueno) != minusculas(s->usuario)) {
+        enviar(s, "AVISO|Solo el creador puede quitar miembros.");
+        return;
+    }
+    string objetivo = bd.nombreCanonico(recortar(usuarioCrudo));
+    if (objetivo.empty() || !bd.esMiembroGrupo(id, objetivo)) {
+        enviar(s, "AVISO|Ese usuario no pertenece al grupo.");
+        return;
+    }
+    if (minusculas(objetivo) == minusculas(sala.dueno)) {
+        enviar(s, "AVISO|El dueno no puede abandonar su grupo; puede eliminarlo.");
+        return;
+    }
+    if (!bd.quitarMiembroGrupo(id, s->usuario, objetivo)) {
+        enviar(s, "AVISO|No se pudo retirar al usuario.");
+        return;
+    }
+    enviarA(objetivo, "GRUPO_QUITADO|" + idTexto);
+    vector<string> miembros = bd.miembrosGrupo(id);
+    enviarAVarios(miembros, "GRUPO|" + idTexto + "|" + sala.nombre + "|" + sala.dueno + "|" + unir(miembros));
+    enviar(s, "AVISO|Se retiro a " + objetivo + " del grupo.");
+}
+
+void Servidor::cmdGrupoSalir(const SesionPtr& s, const string& idTexto) {
+    long long id;
+    SalaGuardada sala;
+    if (!aNumero(idTexto, id) || !bd.grupo(id, sala)) {
+        enviar(s, "AVISO|Ese grupo ya no existe.");
+        return;
+    }
+    if (minusculas(sala.dueno) == minusculas(s->usuario)) {
+        enviar(s, "AVISO|Como creador debes eliminar el grupo, no abandonarlo.");
+        return;
+    }
+    if (!bd.quitarMiembroGrupo(id, s->usuario, s->usuario)) {
+        enviar(s, "AVISO|No perteneces a ese grupo.");
+        return;
+    }
+    enviar(s, "GRUPO_QUITADO|" + idTexto);
+    vector<string> miembros = bd.miembrosGrupo(id);
+    enviarAVarios(miembros, "GRUPO|" + idTexto + "|" + sala.nombre + "|" + sala.dueno + "|" + unir(miembros));
+    enviar(s, "AVISO|Saliste del grupo.");
+}
+
+void Servidor::cmdGrupoEliminar(const SesionPtr& s, const string& idTexto) {
+    long long id;
+    SalaGuardada sala;
+    if (!aNumero(idTexto, id) || !bd.grupo(id, sala)) {
+        enviar(s, "AVISO|Ese grupo ya no existe.");
+        return;
+    }
+    if (minusculas(sala.dueno) != minusculas(s->usuario)) {
+        enviar(s, "AVISO|Solo el creador puede eliminar este grupo.");
+        return;
+    }
+    vector<string> miembros = bd.miembrosGrupo(id);
+    if (!bd.eliminarGrupo(id, s->usuario)) {
+        enviar(s, "AVISO|No se pudo eliminar el grupo.");
+        return;
+    }
+    enviarAVarios(miembros, "GRUPO_ELIMINADO|" + idTexto);
+    enviar(s, "AVISO|Grupo eliminado.");
+}
+
 void Servidor::cmdCanalNuevo(const SesionPtr& s, const string& nombreCrudo) {
     string nombre = recortar(nombreCrudo);
     string motivo = validarNombre(nombre, MAX_NOMBRE_SALA, "nombre del canal");
@@ -652,6 +767,63 @@ void Servidor::cmdCanalUnir(const SesionPtr& s, const string& idTexto) {
     for (const auto& m : bd.historial("C", to_string(id), 50)) {
         enviar(s, lineaMensaje(m, to_string(id)));
     }
+}
+
+void Servidor::cmdCanalEliminar(const SesionPtr& s, const string& idTexto) {
+    long long id;
+    SalaGuardada sala;
+    if (!aNumero(idTexto, id) || !bd.canal(id, sala)) {
+        enviar(s, "AVISO|Ese canal ya no existe.");
+        return;
+    }
+    if (minusculas(sala.dueno) != minusculas(s->usuario)) {
+        enviar(s, "AVISO|Solo el creador puede eliminar este canal.");
+        return;
+    }
+    if (!bd.eliminarCanal(id, s->usuario)) {
+        enviar(s, "AVISO|No se pudo eliminar el canal.");
+        return;
+    }
+    // Todos ven el catalogo de canales, incluso quienes no se han unido.
+    difundir("CANAL_ELIMINADO|" + idTexto);
+    enviar(s, "AVISO|Canal eliminado.");
+}
+
+void Servidor::cmdEliminarCuenta(const SesionPtr& s, const string& clave, bool& salir) {
+    // Autenticacion adicional: evita borrados por un clic accidental o una sesion abierta.
+    string real, sal, hash;
+    if (!bd.credenciales(s->usuario, real, sal, hash) ||
+        !igualesSeguro(hash, hashClave(sal, clave))) {
+        enviar(s, "AVISO|Contrasena incorrecta. No se elimino la cuenta.");
+        return;
+    }
+
+    vector<string> gruposPropios;
+    vector<string> canalesPropios;
+    for (const auto& g : bd.gruposDe(s->usuario)) {
+        if (minusculas(g.dueno) == minusculas(s->usuario)) gruposPropios.push_back(to_string(g.id));
+    }
+    for (const auto& c : bd.todosLosCanales()) {
+        if (minusculas(c.dueno) == minusculas(s->usuario)) canalesPropios.push_back(to_string(c.id));
+    }
+    // Capturamos los receptores ANTES del borrado en cascada.
+    vector<vector<string>> receptores;
+    for (const string& id : gruposPropios) receptores.push_back(bd.miembrosGrupo(stoll(id)));
+
+    if (!bd.eliminarCuenta(s->usuario)) {
+        enviar(s, "AVISO|No se pudo eliminar la cuenta.");
+        return;
+    }
+
+    for (size_t i = 0; i < gruposPropios.size(); ++i) {
+        enviarAVarios(receptores[i], "GRUPO_ELIMINADO|" + gruposPropios[i]);
+    }
+    for (const string& id : canalesPropios) difundir("CANAL_ELIMINADO|" + id);
+    // El resto de conversaciones tambien pierde los mensajes escritos por esta cuenta.
+    difundir("CUENTA_BORRADA|" + s->usuario);
+    enviar(s, "CUENTA_ELIMINADA");
+    escribirLog("[cuenta] Se elimino el usuario " + s->usuario);
+    salir = true;
 }
 
 void Servidor::cmdCanalMensaje(const SesionPtr& s, const string& idTexto, const string& textoCrudo) {
