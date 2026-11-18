@@ -1,4 +1,4 @@
-# Chat con sockets (C++) 
+# TELECHAT (C++) 
 
 Sistema de mensajería instantánea hecho con **sockets TCP** en C++17.
 
@@ -59,7 +59,7 @@ Esquema (tipos de datos estándar; las llaves foráneas están activadas):
 | `Grupos` / `GrupoMiembros` | `idGrupo`, `nombre`, `idDueno`, `fechaCreacion` / `idGrupo`, `idUsuario`, `fechaUnion` |
 | `Canales` / `CanalMiembros` | `idCanal`, `nombre` (único), `idDueno`, `fechaCreacion` / `idCanal`, `idUsuario`, `fechaUnion` |
 
-Las fechas son `DATETIME` en texto `AAAA-MM-DD HH:MM:SS` (hora local del servidor), así que se leen directo, sin funciones de conversión:
+Las fechas se mantienen en SQLite como `DATETIME` en texto `AAAA-MM-DD HH:MM:SS` (hora local del servidor), sin migrar la base existente. Al transmitir mensajes, el servidor convierte esa fecha a una marca UNIX; **el cliente muestra la hora local de su computadora**, aunque el servidor esté en otra zona horaria. Para que aparezca la hora correcta hay que recompilar y ejecutar **servidor y cliente** de esta versión:
 
 ```bash
 sqlite3 -header -column chat.db "SELECT m.idMensaje, u.nombre AS autor, m.texto, m.fechaEnvio FROM Mensajes m JOIN Usuarios u ON u.idUsuario = m.idAutor;"
@@ -141,3 +141,12 @@ python3 pruebas/prueba_administracion.py ./servidor  # (o ./build/servidor)
 ## Licencia
 
 MIT (ver `LICENSE`). La fuente DejaVu Sans conserva su propia licencia (`recursos/LICENSE-DejaVu.txt`).
+
+## Ajustes de interfaz y hora (TELECHAT)
+
+- La ventana y la pantalla de acceso muestran **TELECHAT**.
+- **Administrar grupo** y **Eliminar canal** están en la esquina superior derecha del encabezado de la conversación, sin tapar la etiqueta «Mensaje». Los títulos largos se acortan con `...` cuando hace falta.
+- En **Eliminar cuenta** se muestra una sola indicación de contraseña, por encima del campo correspondiente.
+- La hora de cada mensaje se calcula en el **cliente** según la zona horaria del equipo: `HH:MM` para hoy y `DD/MM HH:MM` para días anteriores. Si el servidor está en UTC y el cliente en México, se verá la hora de México.
+- **Hay que actualizar ambos ejecutables:** recompilar el servidor Linux con `make` y el cliente Windows con `compilar_windows.cmd`. Si se conecta el cliente nuevo a un servidor viejo, los mensajes viejos con el formato anterior seguirán apareciendo, pero no se corregirá su zona horaria hasta actualizar el servidor.
+- Las fechas almacenadas anteriormente siguen siendo legibles; no se borra ni recrea `chat-v2.db`. Se supone que el servidor ejecuta con la misma zona horaria con que se guardaron esos registros.

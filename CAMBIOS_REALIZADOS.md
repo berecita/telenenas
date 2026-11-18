@@ -30,3 +30,11 @@
 El ZIP incluye un servidor Linux recompilado y el código fuente de cliente actualizado. El entorno de preparación no tenía SFML ni conectividad para descargarla, de modo que **no contiene un cliente actualizado ya compilado**. Los ejecutables del cliente de la versión anterior se retiraron para evitar que se ejecute una versión obsoleta. En Windows, ejecuta `compilar_windows.cmd` tras instalar CMake, un compilador C++ compatible y Git; se descargará SFML 2.6.1 si no está instalada. Consulta `README.md`.
 
 **Antes de eliminar cuentas o salas importantes, haz copia de la base de datos. El borrado es permanente.**
+
+## Correcciones posteriores (TELECHAT)
+
+- Título de la ventana y del acceso cambiado a **TELECHAT**.
+- Botones **Administrar grupo** y **Eliminar canal** reubicados en el encabezado; textos acortados de manera segura para no taparlos.
+- Eliminado el texto de contraseña duplicado en el diálogo de eliminación de cuenta; campo y etiqueta separados.
+- Hora de mensajes corregida para respetar la zona horaria del cliente: servidor manda marca temporal UNIX a partir de las fechas locales que ya almacena SQLite, cliente la presenta en su zona horaria.
+- Se deben recompilar cliente y servidor para que el ajuste de hora funcione. La base de datos existente no se modifica.

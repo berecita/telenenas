@@ -1,6 +1,7 @@
 #include "Servidor.h"
 
 #include "../comun/Base64.h"
+#include "../comun/FechaHora.h"
 #include "../comun/Protocolo.h"
 #include "Sha256.h"
 
@@ -85,27 +86,6 @@ static string validarNombre(const string& nombre, size_t maxCaracteres, const st
     }
 
     return "";
-}
-
-// La base de datos guarda la fecha como texto "AAAA-MM-DD HH:MM:SS" (hora local).
-// Al cliente le mandamos "HH:MM" si es de hoy, o "DD/MM HH:MM" si es de otro dia.
-static string fechaTexto(const string& fecha) {
-    if (fecha.size() < 16) return fecha;
-
-    time_t ahora = time(nullptr);
-    tm local;
-    localtime_r(&ahora, &local);
-
-    char hoy[16];
-    strftime(hoy, sizeof(hoy), "%Y-%m-%d", &local);
-
-    string hora = fecha.substr(11, 5);
-
-    if (fecha.compare(0, 10, hoy) == 0) {
-        return hora;
-    }
-
-    return fecha.substr(8, 2) + "/" + fecha.substr(5, 2) + " " + hora;
 }
 
 static string unir(const vector<string>& v, char separador = ',') {
@@ -206,7 +186,7 @@ static bool leerLinea(Sesion& s, string& linea) {
 
 // Linea de mensaje para el cliente. `clave` es la que ve ESE cliente.
 static string lineaMensaje(const MensajeGuardado& m, const string& clave) {
-    return "M|" + m.ambito + "|" + clave + "|" + to_string(m.id) + "|" + fechaTexto(m.fecha) + "|" +
+    return "M|" + m.ambito + "|" + clave + "|" + to_string(m.id) + "|" + fechaInstante(m.fecha) + "|" +
            m.autor + "|" + m.texto;
 }
 

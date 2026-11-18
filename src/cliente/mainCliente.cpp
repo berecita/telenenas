@@ -1,5 +1,5 @@
 // =====================================================================
-//  CHAT - Cliente grafico (SFML)
+//  TELECHAT - Cliente grafico (SFML)
 //
 //  Funciona en Windows, Linux y macOS: la red usa sf::TcpSocket (SFML
 //  Network) y NO hay hilos. Un solo ciclo hace, en cada cuadro:
@@ -145,6 +145,18 @@ static void rectangulo(Ventana& v, float x, float y, float ancho, float alto, sf
     v.getWindow().draw(r);
 }
 
+// Acorta texto UTF-8 sin cortar acentos; deja libre la columna de botones.
+static string acortarTexto(Ventana& ventana, string texto, unsigned int tamano, float anchoMax) {
+    if (ventana.medirTexto(texto, tamano) <= anchoMax) return texto;
+    const string puntos = "...";
+    while (!texto.empty() && ventana.medirTexto(texto + puntos, tamano) > anchoMax) {
+        size_t pos = texto.size() - 1;
+        while (pos > 0 && (static_cast<unsigned char>(texto[pos]) & 0xC0) == 0x80) --pos;
+        texto.resize(pos);
+    }
+    return texto + puntos;
+}
+
 // Lo que se muestra en la lista del medio, segun la seccion.
 static vector<ItemLista> construirLista(Chat& chat, Seccion seccion, bool modoGrupo,
                                         const set<string>& marcados) {
@@ -241,7 +253,7 @@ static vector<ItemLista> construirLista(Chat& chat, Seccion seccion, bool modoGr
 
 // =====================================================================
 int main(int argc, char* argv[]) {
-    Ventana ventana("Chat - Sockets y SFML", ANCHO, ALTO);
+    Ventana ventana("TELECHAT", ANCHO, ALTO);
     ventana.abrir();
     sf::RenderWindow& win = ventana.getWindow();
 
@@ -317,13 +329,14 @@ int main(int argc, char* argv[]) {
     Boton botonUnirse("Unirme al canal", AREA_X + AREA_ANCHO / 2 - 100, AREA_Y + AREA_ALTO / 2 + 10, 200, 46);
 
     // Administracion: acciones visibles segun permisos, con dialogos de confirmacion.
-    Boton botonGestionGrupo("Administrar grupo", 435, 524, 190, 30);
-    Boton botonEliminarCanal("Eliminar canal", 435, 524, 175, 30);
+    // Botones en el encabezado derecho, lejos de la etiqueta "Mensaje" (y=536).
+    Boton botonGestionGrupo("Administrar grupo", 790, 15, 195, 34);
+    Boton botonEliminarCanal("Eliminar canal", 790, 15, 195, 34);
     Boton botonEliminarCuenta("Eliminar cuenta", 15, 515, 160, 40);
     botonEliminarCuenta.setColor(sf::Color(255, 205, 236));
     CampoTexto campoNuevoMiembro("Usuario que deseas agregar", 265, 424, 325, 40);
     campoNuevoMiembro.setMaxLongitud(MAX_NOMBRE_USUARIO);
-    CampoTexto campoClaveEliminar("Confirma con tu contrasena", 305, 315, 390, 44, true);
+    CampoTexto campoClaveEliminar("Escribe tu contraseña para confirmar", 305, 330, 390, 44, true);
     campoClaveEliminar.setMaxLongitud(MAX_CLAVE);
     Boton botonAgregarMiembro("Agregar", 615, 424, 155, 40);
     Boton botonSalirDelGrupo("Salir del grupo", 265, 485, 190, 38);
@@ -903,7 +916,7 @@ int main(int argc, char* argv[]) {
             botonEntrar.actualizarHover(mx, my);
             botonRegistro.actualizarHover(mx, my);
 
-            ventana.dibujarTexto("Chat con sockets y SFML", 322, 20, 30, TEXTO_OSCURO);
+            ventana.dibujarTextoCentrado("TELECHAT", sf::FloatRect(275, 16, 450, 42), 34, TEXTO_OSCURO);
             ventana.dibujarTexto("Entra con tu cuenta o créate una nueva", 332, 62, 15, TEXTO_SUAVE);
 
             for (CampoTexto* c : camposLogin) c->dibujar(ventana);
@@ -1076,10 +1089,18 @@ int main(int argc, char* argv[]) {
                     break;
             }
 
+            // Reservamos la columna derecha del encabezado para las acciones.
+            // Se acorta cualquier título/subtítulo largo para que no invada los botones.
+            bool hayAccionSala = conexion.estaActiva() && conv &&
+                (seccion == Seccion::GRUPOS || (seccion == Seccion::CANALES && conv->dueno == c.yo));
+            if (hayAccionSala) {
+                titulo = acortarTexto(ventana, titulo, 24, 350.0f);
+                subtitulo = acortarTexto(ventana, subtitulo, 13, 350.0f);
+            }
             ventana.dibujarTexto(titulo, AREA_X, 14, 24, TEXTO_OSCURO);
             ventana.dibujarTexto(subtitulo, AREA_X, 44, 13, TEXTO_SUAVE);
 
-            // Entre la zona de mensajes y la caja de texto hay espacio para administrar salas.
+            // Las acciones quedan en el encabezado, NO encima del campo "Mensaje".
             if (conexion.estaActiva() && seccion == Seccion::GRUPOS && conv) {
                 botonGestionGrupo.actualizarHover(mx, my);
                 botonGestionGrupo.dibujar(ventana);
@@ -1260,7 +1281,7 @@ int main(int argc, char* argv[]) {
                     ventana.dibujarTexto("Eliminar mi cuenta", 305, 190, 25, ROJO_ERROR);
                     ventana.dibujarTexto("Esta accion es irreversible: se eliminaran", 305, 235, 15, TEXTO_OSCURO);
                     ventana.dibujarTexto("tus mensajes, grupos y canales creados.", 305, 258, 15, TEXTO_OSCURO);
-                    ventana.dibujarTexto("Escribe tu contrasena para continuar:", 305, 290, 14, TEXTO_SUAVE);
+                    // CampoTexto ya dibuja su propia etiqueta (24 px sobre la caja).
                     campoClaveEliminar.dibujar(ventana);
                     botonConfirmarCuenta.setTexto(confirmarCuenta ? "Si, eliminar definitivamente" : "Eliminar mi cuenta");
                     botonConfirmarCuenta.actualizarHover(mx, my);

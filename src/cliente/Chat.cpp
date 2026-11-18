@@ -1,6 +1,7 @@
 #include "Chat.h"
 
 #include "../comun/Protocolo.h"
+#include "../comun/FechaHora.h"
 
 #include <algorithm>
 
@@ -200,7 +201,7 @@ void Chat::procesar(const string& linea) {
 
         MensajeVista m;
         m.id = id;
-        m.hora = c[4];
+        m.hora = horaLocalCliente(c[4]);
         m.autor = c[5];
         m.texto = c[6];
         agregarMensaje(*conv, m);

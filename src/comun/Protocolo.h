@@ -34,7 +34,8 @@
 //    ERR|motivo                       login/registro fallido
 //    AVISO|texto                      error o aviso de cualquier comando
 //    USERS|a,b,c                      usuarios en linea
-//    M|ambito|clave|id|hora|autor|texto
+//    M|ambito|clave|id|timestampUnix|autor|texto  (segundos desde 1970, UTC;
+//                                                 el cliente lo convierte a hora local)
 //          ambito: G general, D directo, R grupo, C canal
 //          clave : "general" / el OTRO usuario / id de grupo / id de canal
 //    GRUPO|id|nombre|dueno|m1,m2,...
