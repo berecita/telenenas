@@ -1,0 +1,113 @@
+name: Clientes Linux y macOS
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cliente:
+    name: ${{ matrix.paquete }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-22.04
+            paquete: telenenas-linux-x64
+          - runner: macos-15
+            paquete: telenenas-macos-arm64
+            arquitectura: arm64
+          - runner: macos-15-intel
+            paquete: telenenas-macos-x64
+            arquitectura: x86_64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar dependencias de Linux
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libx11-dev libxrandr-dev libxcursor-dev libudev-dev libfreetype-dev libgl1-mesa-dev xvfb xauth
+
+      - name: Compilar FreeType estático en macOS
+        if: runner.os == 'macOS'
+        env:
+          ARQUITECTURA: ${{ matrix.arquitectura }}
+        run: |
+          git clone --depth 1 --branch VER-2-13-3 https://github.com/freetype/freetype.git "$RUNNER_TEMP/freetype"
+          cmake -S "$RUNNER_TEMP/freetype" -B "$RUNNER_TEMP/freetype-build" \
+            -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
+            -DCMAKE_OSX_ARCHITECTURES="$ARQUITECTURA" \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0 \
+            -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/freetype-install" \
+            -DFT_DISABLE_ZLIB=ON -DFT_DISABLE_BZIP2=ON -DFT_DISABLE_PNG=ON \
+            -DFT_DISABLE_HARFBUZZ=ON -DFT_DISABLE_BROTLI=ON
+          cmake --build "$RUNNER_TEMP/freetype-build" --parallel 2
+          cmake --install "$RUNNER_TEMP/freetype-build"
+
+      - name: Compilar cliente
+        shell: bash
+        env:
+          ARQUITECTURA: ${{ matrix.arquitectura }}
+        run: |
+          opciones=()
+          if [[ "$RUNNER_OS" == macOS ]]; then
+            fuente="$RUNNER_TEMP/freetype-install"
+            opciones+=(
+              "-DCMAKE_OSX_ARCHITECTURES=$ARQUITECTURA"
+              "-DCMAKE_OSX_DEPLOYMENT_TARGET=12.0"
+              "-DFREETYPE_LIBRARY=$fuente/lib/libfreetype.a"
+              "-DFREETYPE_INCLUDE_DIR_ft2build=$fuente/include/freetype2"
+              "-DFREETYPE_INCLUDE_DIR_freetype2=$fuente/include/freetype2"
+            )
+          fi
+          cmake -S . -B build-cliente -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SERVIDOR=OFF -DBUILD_CLIENTE=ON \
+            -DCMAKE_DISABLE_FIND_PACKAGE_SFML=ON -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+            "${opciones[@]}"
+          cmake --build build-cliente --target cliente --parallel 2
+
+      - name: Empaquetar cliente
+        shell: bash
+        env:
+          PAQUETE: ${{ matrix.paquete }}
+        run: |
+          mkdir -p "paquetes/$PAQUETE"
+          destino="paquetes/$PAQUETE"
+          install -m 755 build-cliente/cliente "$destino/cliente"
+          cp -R recursos "$destino/"
+          cp LICENSE "$destino/LICENSE-Telenenas.txt"
+          cp build-cliente/_deps/sfml-src/license.md "$destino/LICENSE-SFML.md"
+
+          cat > "$destino/Abrir-Telenenas" <<'LANZADOR'
+          #!/bin/sh
+          cd "$(dirname "$0")" || exit 1
+          exec ./cliente "${1:-3.149.102.2}" "${2:-3041}"
+          LANZADOR
+          chmod +x "$destino/Abrir-Telenenas"
+
+          if [[ "$RUNNER_OS" == Linux ]]; then
+            ldd "$destino/cliente" | tee "$RUNNER_TEMP/dependencias.txt"
+            if grep -Eq 'not found|libsfml' "$RUNNER_TEMP/dependencias.txt"; then
+              exit 1
+            fi
+            estado=0
+            timeout 5s xvfb-run -a "$destino/Abrir-Telenenas" || estado=$?
+            test "$estado" -eq 124
+          else
+            cp "$RUNNER_TEMP/freetype/docs/FTL.TXT" "$destino/LICENSE-FreeType.txt"
+            otool -L "$destino/cliente" | tee "$RUNNER_TEMP/dependencias.txt"
+            awk 'NR > 1 && $1 !~ /^\/(usr\/lib|System\/Library)\// { exit 1 }' "$RUNNER_TEMP/dependencias.txt"
+            codesign --force --sign - "$destino/cliente"
+            codesign --verify "$destino/cliente"
+          fi
+          tar -czf "paquetes/$PAQUETE.tar.gz" -C paquetes "$PAQUETE"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.paquete }}
+          path: paquetes/${{ matrix.paquete }}.tar.gz
+          if-no-files-found: error

@@ -126,3 +126,34 @@ python3 pruebas/prueba_servidor.py ./servidor        # (o ./build/servidor)
 ## Licencia
 
 MIT (ver `LICENSE`). La fuente DejaVu Sans conserva su propia licencia (`recursos/LICENSE-DejaVu.txt`).
+
+## Ejecutables para Linux y macOS
+
+En GitHub, abre **Actions → Clientes Linux y macOS → Run workflow**. Al
+terminar, descarga el paquete correspondiente desde **Artifacts**.
+
+| Paquete | Equipo |
+|---|---|
+| `telenenas-linux-x64` | Ubuntu 22.04 o distribución compatible en x86-64 con sesión gráfica |
+| `telenenas-macos-arm64` | Mac con Apple Silicon, macOS 12 o posterior |
+| `telenenas-macos-x64` | Mac Intel, macOS 12 o posterior |
+
+Extrae el ZIP de GitHub y luego el archivo `.tar.gz` que contiene. Desde la
+terminal, entra en la carpeta extraída y ejecuta:
+
+```sh
+./Abrir-Telenenas
+```
+
+El lanzador usa el servidor de la práctica en `3.149.102.2:3041`. Si necesitan
+otra dirección, ejecuten `./Abrir-Telenenas HOST PUERTO`.
+
+En Linux, el binario usa las bibliotecas gráficas del sistema. Si faltan en
+Ubuntu 22.04, instala `libx11-6 libxrandr2 libxcursor1 libudev1 libfreetype6 libgl1`.
+Los paquetes de macOS incluyen FreeType enlazado estáticamente y llevan firma
+ad hoc para la prueba. Si macOS bloquea el binario descargado, un paquete para
+distribución pública sin ese aviso requiere firma con Developer ID y notarización.
+
+Para que los ejecutables estén disponibles directamente después de clonar,
+extrae los paquetes verificados en `dist/` y sube esas carpetas al repositorio.
+Cada carpeta debe conservar el ejecutable, el lanzador y los recursos juntos.
