@@ -9,7 +9,7 @@ LIBS     ?= -lsqlite3 -pthread
 
 servidor: src/servidor/*.cpp src/servidor/*.h src/comun/*.cpp src/comun/*.h
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) src/servidor/mainServidor.cpp src/servidor/Servidor.cpp src/servidor/BaseDatos.cpp \
-		src/servidor/Sha256.cpp src/comun/Base64.cpp -o servidor $(LIBS)
+		src/comun/Base64.cpp -o servidor $(LIBS)
 
 clean:
 	rm -f servidor

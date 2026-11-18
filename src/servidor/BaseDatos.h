@@ -28,6 +28,12 @@ struct MensajeGuardado {
     bool eliminado = false; // solo queda la constancia, nunca el texto original
 };
 
+struct LecturaGuardada {
+    std::string ambito;
+    std::string clave;
+    long long ultimoId = 0;
+};
+
 struct SalaGuardada {      // un grupo o un canal
     long long id = 0;
     std::string nombre;
@@ -55,11 +61,17 @@ public:
 
     // ---- usuarios ----
     // avatar: "" (ninguno), "foto" (foto propia, en `foto` en base64) o el nombre de un animal.
-    bool crearUsuario(const std::string& nombre, const std::string& sal, const std::string& hash,
+    bool crearUsuario(const std::string& nombre, const std::string& clave,
                       const std::string& avatar, const std::string& foto);
     // Regresa false si no existe. `nombreReal` trae las mayusculas con que se registro.
-    bool credenciales(const std::string& nombre, std::string& nombreReal,
-                      std::string& sal, std::string& hash);
+    bool credenciales(const std::string& nombre, std::string& nombreReal, std::string& clave);
+    bool lecturasInicializadas(const std::string& usuario);
+    bool finalizarLecturasIniciales(const std::string& usuario);
+    bool marcarLeido(const std::string& usuario, const std::string& ambito,
+                     const std::string& clave, long long id);
+    std::vector<LecturaGuardada> lecturasDe(const std::string& usuario);
+    long long ultimoIdConversacion(const std::string& usuario, const std::string& ambito,
+                                  const std::string& clave);
     std::string nombreCanonico(const std::string& nombre); // "" si no existe
     bool perfil(const std::string& nombre, std::string& avatar, std::string& foto);
     bool eliminarCuenta(const std::string& usuario); // elimina tambien sus salas mediante CASCADE

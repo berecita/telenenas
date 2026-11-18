@@ -148,8 +148,9 @@ check(any(l.startswith("CANAL|") and l.endswith("|Avisos|Ana|1") for l in hist) 
 # --- base de datos ---
 import re
 con=sqlite3.connect(DB)
-n,sal,hs=con.execute("select nombre,sal,hashClave from Usuarios where nombre='Ana'").fetchone()
-check("clave123" not in hs and len(hs)==64 and len(sal)==32,"contraseña guardada como hash con sal (no en claro)")
+n,clave=con.execute("select nombre,clave from Usuarios where nombre='Ana'").fetchone()
+check(n == "Ana" and clave == "clave123", "contrasena guardada literalmente en SQLite (sin hash)")
+check("hashClave" not in [r[1] for r in con.execute("PRAGMA table_info(Usuarios)")], "columna hash eliminada del esquema")
 check(con.execute("select count(*) from Usuarios").fetchone()[0]==4,"4 usuarios en BD (tablas intactas tras la inyección)")
 check(con.execute("select count(*) from Mensajes").fetchone()[0]>=5,"mensajes persistidos")
 check(con.execute("select count(*) from Mensajes where texto like '%para borrar%'").fetchone()[0]==0,"los mensajes borrados ya no están en la BD")

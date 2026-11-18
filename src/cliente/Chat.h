@@ -54,6 +54,7 @@ struct Conversacion {
     bool unido = true;                 // canales: ya me uni?
     bool nuevos = false;               // hay mensajes sin leer
     long long ultimoId = 0;            // para ignorar mensajes repetidos
+    long long ultimoLeido = 0;         // cursor persistente recibido del servidor
     int desplazamiento = 0;            // cuantas lineas estoy "arriba" del final (0 = viendo lo ultimo)
     std::vector<MensajeVista> mensajes;
     std::vector<Linea> lineas;

@@ -65,6 +65,8 @@ private:
     void cmdCanalMensaje(const SesionPtr& s, const std::string& id, const std::string& texto);
     void cmdBorrar(const SesionPtr& s, const std::string& id);
     void cmdFoto(const SesionPtr& s, const std::string& usuario);
+    void cmdMarcarLeido(const SesionPtr& s, const std::string& ambito,
+                       const std::string& clave, const std::string& idTexto);
 
 public:
     Servidor(int puerto, const std::string& rutaBD);

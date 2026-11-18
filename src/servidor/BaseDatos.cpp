@@ -3,12 +3,13 @@
 #include <sqlite3.h>
 
 #include <algorithm>
+#include <fstream>
 #include <iostream>
 
 using namespace std;
 
 // Version del esquema (se guarda en PRAGMA user_version).
-static const int VERSION_ESQUEMA = 2;
+static const int VERSION_ESQUEMA = 3;
 
 BaseDatos::~BaseDatos() {
     if (db != nullptr) {
@@ -32,9 +33,46 @@ bool BaseDatos::abrir(const string& ruta) {
     int versionActual = version.empty() ? 0 : stoi(version[0][0]);
     bool hayTablas = !cons("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").empty();
 
+    if (versionActual == 2 && hayTablas) {
+        // Los hashes NO permiten recuperar una clave original. Se preservan las
+        // cuentas y conversaciones, pero la clave queda pendiente de asignacion.
+        // Crear primero una copia SQLite verificable para no perder los datos.
+        const string respaldo = ruta + ".respaldo_v2.db";
+        if (!ifstream(respaldo).good()) {
+            sqlite3* copia = nullptr;
+            if (sqlite3_open(respaldo.c_str(), &copia) != SQLITE_OK) {
+                cerr << "No se pudo crear el respaldo: " << respaldo << endl;
+                if (copia) sqlite3_close(copia);
+                return false;
+            }
+            sqlite3_backup* copiaActiva = sqlite3_backup_init(copia, "main", db, "main");
+            int resultado = copiaActiva ? sqlite3_backup_step(copiaActiva, -1) : SQLITE_ERROR;
+            if (copiaActiva) sqlite3_backup_finish(copiaActiva);
+            sqlite3_close(copia);
+            if (resultado != SQLITE_DONE) {
+                cerr << "Error creando el respaldo antes de la migracion." << endl;
+                return false;
+            }
+        }
+
+        bool ok = ejec("BEGIN IMMEDIATE") &&
+                  ejec("ALTER TABLE Usuarios ADD COLUMN clave TEXT NOT NULL DEFAULT ''") &&
+                  ejec("ALTER TABLE Usuarios ADD COLUMN lecturasInicializadas INTEGER NOT NULL DEFAULT 0") &&
+                  ejec("ALTER TABLE Usuarios DROP COLUMN sal") &&
+                  ejec("ALTER TABLE Usuarios DROP COLUMN hashClave") &&
+                  ejec("PRAGMA user_version = 3") && ejec("COMMIT");
+        if (!ok) {
+            ejec("ROLLBACK");
+            cerr << "No se pudo migrar la base de datos. Respaldo: " << respaldo << endl;
+            return false;
+        }
+        versionActual = 3;
+        cerr << "Base de datos migrada a contrasenas en texto plano. "
+             << "Las cuentas anteriores necesitan una nueva clave mediante configurar_claves.py. "
+             << "Respaldo: " << respaldo << endl;
+    }
     if (versionActual != VERSION_ESQUEMA && hayTablas) {
-        cerr << "El archivo '" << ruta << "' tiene un esquema de una version anterior.\n"
-             << "Borralo (rm " << ruta << ") o usa otro nombre de archivo para crear la base de datos nueva." << endl;
+        cerr << "Version del esquema de base de datos no compatible: " << versionActual << endl;
         return false;
     }
 
@@ -44,8 +82,8 @@ bool BaseDatos::abrir(const string& ruta) {
         "CREATE TABLE IF NOT EXISTS Usuarios ("
         "  idUsuario INTEGER PRIMARY KEY AUTOINCREMENT,"
         "  nombre VARCHAR(16) NOT NULL UNIQUE COLLATE NOCASE CHECK (length(nombre) BETWEEN 1 AND 16),"
-        "  sal CHAR(32) NOT NULL,"
-        "  hashClave CHAR(64) NOT NULL,"
+        "  clave TEXT NOT NULL DEFAULT '',"
+        "  lecturasInicializadas INTEGER NOT NULL DEFAULT 0,"
         "  avatar VARCHAR(10) NOT NULL DEFAULT '' CHECK (avatar IN ('', 'foto', 'gato', 'perro', 'conejo', 'oso', 'zorro')),"
         "  foto TEXT NOT NULL DEFAULT '',"
         "  fechaRegistro DATETIME NOT NULL DEFAULT (datetime('now', 'localtime')));"
@@ -116,7 +154,14 @@ bool BaseDatos::abrir(const string& ruta) {
         "  FOREIGN KEY (idDestino) REFERENCES Usuarios(idUsuario) ON DELETE CASCADE,"
         "  FOREIGN KEY (idGrupo) REFERENCES Grupos(idGrupo) ON DELETE CASCADE,"
         "  FOREIGN KEY (idCanal) REFERENCES Canales(idCanal) ON DELETE CASCADE);"
-        "CREATE INDEX IF NOT EXISTS idxEliminadosSala ON MensajesEliminados(tipo, idGrupo, idCanal, idMensaje);";
+        "CREATE INDEX IF NOT EXISTS idxEliminadosSala ON MensajesEliminados(tipo, idGrupo, idCanal, idMensaje);"
+        "CREATE TABLE IF NOT EXISTS Lecturas ("
+        "  idUsuario INTEGER NOT NULL,"
+        "  ambito CHAR(1) NOT NULL CHECK (ambito IN ('G', 'D', 'R', 'C')) ,"
+        "  clave TEXT NOT NULL COLLATE NOCASE,"
+        "  ultimoId INTEGER NOT NULL DEFAULT 0,"
+        "  PRIMARY KEY (idUsuario, ambito, clave),"
+        "  FOREIGN KEY (idUsuario) REFERENCES Usuarios(idUsuario) ON DELETE CASCADE);";
 
     char* error = nullptr;
 
@@ -235,25 +280,78 @@ static MensajeGuardado filaAMensaje(const vector<string>& f) {
 // Usuarios
 // ---------------------------------------------------------------------
 
-bool BaseDatos::crearUsuario(const string& nombre, const string& sal, const string& hash,
+bool BaseDatos::crearUsuario(const string& nombre, const string& clave,
                              const string& avatar, const string& foto) {
     lock_guard<mutex> g(mutexBD);
-    return ejec("INSERT INTO Usuarios(nombre, sal, hashClave, avatar, foto) VALUES(?1, ?2, ?3, ?4, ?5)",
-                {nombre, sal, hash, avatar, foto});
+    // El texto introducido se almacena literalmente, sin sal ni funcion hash.
+    return ejec("INSERT INTO Usuarios(nombre, clave, avatar, foto) VALUES(?1, ?2, ?3, ?4)",
+                {nombre, clave, avatar, foto});
 }
 
-bool BaseDatos::credenciales(const string& nombre, string& nombreReal, string& sal, string& hash) {
+bool BaseDatos::credenciales(const string& nombre, string& nombreReal, string& clave) {
     lock_guard<mutex> g(mutexBD);
-    auto filas = cons("SELECT nombre, sal, hashClave FROM Usuarios WHERE nombre = ?1", {nombre});
-
-    if (filas.empty()) {
-        return false;
-    }
-
+    auto filas = cons("SELECT nombre, clave FROM Usuarios WHERE nombre = ?1", {nombre});
+    if (filas.empty()) return false;
     nombreReal = filas[0][0];
-    sal = filas[0][1];
-    hash = filas[0][2];
+    clave = filas[0][1];
     return true;
+}
+
+bool BaseDatos::lecturasInicializadas(const string& usuario) {
+    lock_guard<mutex> g(mutexBD);
+    auto filas = cons("SELECT lecturasInicializadas FROM Usuarios WHERE nombre=?1", {usuario});
+    return !filas.empty() && filas[0][0] == "1";
+}
+
+bool BaseDatos::finalizarLecturasIniciales(const string& usuario) {
+    lock_guard<mutex> g(mutexBD);
+    return ejec("UPDATE Usuarios SET lecturasInicializadas=1 WHERE nombre=?1", {usuario});
+}
+
+bool BaseDatos::marcarLeido(const string& usuario, const string& ambito,
+                          const string& clave, long long id) {
+    lock_guard<mutex> g(mutexBD);
+    if (id < 0) return false;
+    return ejec("INSERT INTO Lecturas(idUsuario, ambito, clave, ultimoId) "
+                "SELECT idUsuario, ?2, ?3, ?4 FROM Usuarios WHERE nombre=?1 "
+                "ON CONFLICT(idUsuario, ambito, clave) DO UPDATE SET "
+                "ultimoId=MAX(ultimoId, excluded.ultimoId)",
+                {usuario, ambito, clave, to_string(id)});
+}
+
+vector<LecturaGuardada> BaseDatos::lecturasDe(const string& usuario) {
+    lock_guard<mutex> g(mutexBD);
+    vector<LecturaGuardada> resultado;
+    for (const auto& f : cons("SELECT l.ambito, l.clave, l.ultimoId FROM Lecturas l "
+                              "JOIN Usuarios u ON u.idUsuario=l.idUsuario WHERE u.nombre=?1", {usuario})) {
+        resultado.push_back({f[0], f[1], stoll(f[2])});
+    }
+    return resultado;
+}
+
+long long BaseDatos::ultimoIdConversacion(const string& usuario, const string& ambito,
+                                         const string& clave) {
+    lock_guard<mutex> g(mutexBD);
+    string condicion;
+    vector<string> params;
+    if (ambito == "G" && clave == "general") {
+        condicion = "tipo='G'";
+    } else if (ambito == "R" || ambito == "C") {
+        condicion = string("tipo='") + ambito + "' AND " + (ambito == "R" ? "idGrupo" : "idCanal") + "=?1";
+        params = {clave};
+    } else if (ambito == "D") {
+        condicion = "tipo='D' AND ((idAutor=(SELECT idUsuario FROM Usuarios WHERE nombre=?1) "
+                    "AND idDestino=(SELECT idUsuario FROM Usuarios WHERE nombre=?2)) OR "
+                    "(idAutor=(SELECT idUsuario FROM Usuarios WHERE nombre=?2) "
+                    "AND idDestino=(SELECT idUsuario FROM Usuarios WHERE nombre=?1)))";
+        params = {usuario, clave};
+    } else {
+        return 0;
+    }
+    auto filas = cons("SELECT MAX(idMensaje) FROM ("
+                      "SELECT idMensaje FROM Mensajes WHERE " + condicion + " UNION ALL "
+                      "SELECT idMensaje FROM MensajesEliminados WHERE " + condicion + ")", params);
+    return (filas.empty() || filas[0][0].empty()) ? 0 : stoll(filas[0][0]);
 }
 
 string BaseDatos::nombreCanonico(const string& nombre) {

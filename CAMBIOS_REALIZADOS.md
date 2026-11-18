@@ -48,3 +48,12 @@ El ZIP incluye un servidor Linux recompilado y el código fuente de cliente actu
 - **Pruebas:** `pruebas/prueba_canales_historial.py` comprueba permisos, historial de 625 mensajes, borrados persistentes, mensajes directos con todo el contenido eliminado y ausencia de texto original en SQLite.
 
 **Para actualizar tu aplicación:** vuelve a compilar el cliente y sustituye el servidor por el nuevo; conserva tu archivo `.db` habitual. Antes de cualquier actualización, respalda el archivo SQLite por precaución.
+
+
+## Último ajuste: contraseñas en texto plano y notificaciones reales
+
+- Quitado SHA-256 y la sal en servidor y archivos de compilación. `Usuarios.clave` almacena el valor original. La foto conserva Base64 porque el protocolo sigue siendo de texto y necesita enviar bytes de imagen.
+- Esquema SQLite actualizado a v3. La migración de v2 respalda el archivo como `.respaldo_v2.db`, preserva cuentas y mensajes y elimina las columnas `sal`/`hashClave`; para cuentas anteriores hay que definir contraseñas nuevas con `configurar_claves.py` porque no se pueden recuperar los valores originales a partir del hash.
+- Nueva tabla `Lecturas`: conserva el último ID leído por usuario y conversación, también después de salir y volver a iniciar sesión.
+- Los puntos solo se muestran por mensajes de otras personas posteriores al último leído, nunca por la mera carga de grupos/historial. Un mensaje nuevo recibido estando desconectado sí se considera no leído.
+- Nuevas pruebas: `pruebas/prueba_lecturas_claves.py` y `pruebas/prueba_notificaciones_cliente.cpp`.

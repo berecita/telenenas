@@ -27,6 +27,7 @@
 //    CUENTA_ELIMINAR|contrasena        borra la cuenta propia tras revalidar clave
 //    CMSG|idCanal|texto               mensaje a un canal (solo el dueño)
 //    BORRAR|idMensaje                 elimina un mensaje PROPIO (para todos)
+//    MARCAR_LEIDO|ambito|clave|id      informa cual es el ultimo mensaje visto
 //    FOTO_PEDIR|usuario               pide la foto de perfil de alguien
 //    SALIR
 //
@@ -35,6 +36,7 @@
 //    ERR|motivo                       login/registro fallido
 //    AVISO|texto                      error o aviso de cualquier comando
 //    USERS|a,b,c                      usuarios en linea
+//    LECTURA|ambito|clave|ultimoId    marcador de lectura persistente
 //    M|ambito|clave|id|timestampUnix|autor|texto  (segundos desde 1970, UTC;
 //                                                 el cliente lo convierte a hora local)
 //          ambito: G general, D directo, R grupo, C canal

@@ -24,7 +24,6 @@ if(BUILD_SERVIDOR)
 		src/servidor/mainServidor.cpp
 		src/servidor/Servidor.cpp
 		src/servidor/BaseDatos.cpp
-		src/servidor/Sha256.cpp
 		src/comun/Base64.cpp)
 	target_link_libraries(servidor PRIVATE Threads::Threads)
 

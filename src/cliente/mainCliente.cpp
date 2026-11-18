@@ -924,6 +924,15 @@ int main(int argc, char* argv[]) {
                 int maxDesp = max(0, static_cast<int>(conv->lineas.size()) - LINEAS_VISIBLES);
                 conv->desplazamiento = max(0, min(conv->desplazamiento, maxDesp));
                 conv->nuevos = false; // la estoy viendo
+                if (conexion.estaActiva() && conv->ultimoId > conv->ultimoLeido &&
+                    (seccion != Seccion::CANALES || conv->unido)) {
+                    string ambito = seccion == Seccion::GENERAL ? "G" :
+                                    seccion == Seccion::DIRECTOS ? "D" :
+                                    seccion == Seccion::GRUPOS ? "R" : "C";
+                    string clave = seccion == Seccion::GENERAL ? "general" : conv->id;
+                    conexion.enviar("MARCAR_LEIDO|" + ambito + "|" + clave + "|" + to_string(conv->ultimoId));
+                    conv->ultimoLeido = conv->ultimoId;
+                }
             }
         }
 

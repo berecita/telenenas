@@ -3,7 +3,6 @@
 #include "../comun/Base64.h"
 #include "../comun/FechaHora.h"
 #include "../comun/Protocolo.h"
-#include "Sha256.h"
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -17,9 +16,7 @@
 #include <chrono>
 #include <cstring>
 #include <ctime>
-#include <fstream>
 #include <iostream>
-#include <random>
 #include <set>
 #include <thread>
 
@@ -105,45 +102,6 @@ static bool aNumero(const string& texto, long long& valor) {
     } catch (...) {
         return false;
     }
-}
-
-// ---- contrasenas: sal aleatoria + SHA-256 repetido ----
-
-static string generarSal() {
-    unsigned char bytes[16];
-    ifstream urandom("/dev/urandom", ios::binary);
-
-    if (urandom) {
-        urandom.read(reinterpret_cast<char*>(bytes), sizeof(bytes));
-    }
-
-    if (!urandom) {
-        random_device rd;
-        for (auto& b : bytes) b = static_cast<unsigned char>(rd());
-    }
-
-    static const char HEX[] = "0123456789abcdef";
-    string sal;
-    for (unsigned char b : bytes) {
-        sal += HEX[b >> 4];
-        sal += HEX[b & 0xF];
-    }
-    return sal;
-}
-
-static string hashClave(const string& sal, const string& clave) {
-    string h = sha256Hex(sal + clave);
-    for (int i = 0; i < 5000; i++) {
-        h = sha256Hex(h + sal + clave);
-    }
-    return h;
-}
-
-static bool igualesSeguro(const string& a, const string& b) {
-    if (a.size() != b.size()) return false;
-    unsigned char r = 0;
-    for (size_t i = 0; i < a.size(); i++) r |= static_cast<unsigned char>(a[i] ^ b[i]);
-    return r == 0;
 }
 
 // ---- sockets ----
@@ -303,9 +261,7 @@ bool Servidor::autenticar(const SesionPtr& s) {
             }
 
             if (motivo.empty()) {
-                string sal = generarSal();
-
-                if (!bd.crearUsuario(nombre, sal, hashClave(sal, clave), avatar, foto)) {
+                if (!bd.crearUsuario(nombre, clave, avatar, foto)) {
                     motivo = "No se pudo crear la cuenta.";
                 } else {
                     nombreReal = nombre;
@@ -315,11 +271,12 @@ bool Servidor::autenticar(const SesionPtr& s) {
 
         } else if (c[0] == "LOGIN" && c.size() >= 3) {
             nombre = recortar(c[1]);
-            string sal, hash;
-
-            // El mismo mensaje si el usuario no existe o la clave falla: no revela cuales usuarios existen.
-            if (!bd.credenciales(nombre, nombreReal, sal, hash) ||
-                !igualesSeguro(hash, hashClave(sal, c[2]))) {
+            string claveGuardada;
+            if (!bd.credenciales(nombre, nombreReal, claveGuardada)) {
+                motivo = "Usuario o contrasena incorrectos.";
+            } else if (claveGuardada.empty()) {
+                motivo = "Cuenta antigua: configura tu clave con configurar_claves.py.";
+            } else if (claveGuardada != c[2]) {
                 motivo = "Usuario o contrasena incorrectos.";
             }
 
@@ -357,11 +314,38 @@ void Servidor::enviarEstadoInicial(const SesionPtr& s) {
     const string& yo = s->usuario;
     const int LIMITE = 50; // general, directos y grupos; los canales no tienen limite
 
+    // Al actualizar a esta version, considerar ya leido el historial previo.
+    // Esto se ejecuta una sola vez por cuenta; despues los mensajes recibidos
+    // mientras el usuario esta desconectado SI se notifican al volver a entrar.
+    if (!bd.lecturasInicializadas(yo)) {
+        bd.marcarLeido(yo, "G", "general", bd.ultimoIdConversacion(yo, "G", "general"));
+        for (const auto& otro : bd.companerosDirectos(yo))
+            bd.marcarLeido(yo, "D", otro, bd.ultimoIdConversacion(yo, "D", otro));
+        for (const auto& g : bd.gruposDe(yo))
+            bd.marcarLeido(yo, "R", to_string(g.id), bd.ultimoIdConversacion(yo, "R", to_string(g.id)));
+        for (const auto& c : bd.todosLosCanales()) {
+            if (bd.esMiembroCanal(c.id, yo))
+                bd.marcarLeido(yo, "C", to_string(c.id), bd.ultimoIdConversacion(yo, "C", to_string(c.id)));
+        }
+        bd.finalizarLecturasIniciales(yo);
+    }
+    const auto lecturas = bd.lecturasDe(yo);
+    auto lecturaDe = [&](const string& ambito, const string& clave) -> long long {
+        for (const auto& l : lecturas)
+            if (l.ambito == ambito && minusculas(l.clave) == minusculas(clave)) return l.ultimoId;
+        return 0;
+    };
+    auto informarLectura = [&](const string& ambito, const string& clave) {
+        enviar(s, "LECTURA|" + ambito + "|" + clave + "|" + to_string(lecturaDe(ambito, clave)));
+    };
+
+    informarLectura("G", "general");
     for (const auto& m : bd.historial("G", "general", LIMITE)) {
         enviar(s, lineaMensaje(m, "general"));
     }
 
     for (const string& otro : bd.companerosDirectos(yo)) {
+        informarLectura("D", otro);
         for (const auto& m : bd.historialDirecto(yo, otro, LIMITE)) {
             enviar(s, lineaMensaje(m, otro));
         }
@@ -370,6 +354,7 @@ void Servidor::enviarEstadoInicial(const SesionPtr& s) {
     for (const auto& g : bd.gruposDe(yo)) {
         enviar(s, "GRUPO|" + to_string(g.id) + "|" + g.nombre + "|" + g.dueno + "|" +
                   unir(bd.miembrosGrupo(g.id)));
+        informarLectura("R", to_string(g.id));
 
         for (const auto& m : bd.historial("R", to_string(g.id), LIMITE)) {
             enviar(s, lineaMensaje(m, to_string(g.id)));
@@ -381,6 +366,7 @@ void Servidor::enviarEstadoInicial(const SesionPtr& s) {
         enviar(s, "CANAL|" + to_string(c.id) + "|" + c.nombre + "|" + c.dueno + "|" + (unido ? "1" : "0"));
 
         if (unido) {
+            informarLectura("C", to_string(c.id));
             for (const auto& m : bd.historial("C", to_string(c.id), 0)) {
                 enviar(s, lineaMensaje(m, to_string(c.id)));
             }
@@ -452,6 +438,9 @@ void Servidor::procesarComando(const SesionPtr& s, const string& linea, bool& sa
     } else if (cmd == "CANAL_MIEMBROS_PEDIR") {
         vector<string> d = separarMaximo(linea, 2);
         if (d.size() >= 2) cmdCanalMiembros(s, d[1]);
+    } else if (cmd == "MARCAR_LEIDO") {
+        vector<string> d = separarMaximo(linea, 4);
+        if (d.size() == 4) cmdMarcarLeido(s, d[1], d[2], d[3]);
     } else if (cmd == "BORRAR") {
         vector<string> d = separarMaximo(linea, 2);
         if (d.size() >= 2) cmdBorrar(s, d[1]);
@@ -622,7 +611,10 @@ void Servidor::cmdGrupoAgregar(const SesionPtr& s, const string& idTexto, const 
         return;
     }
     vector<string> miembros = bd.miembrosGrupo(id);
+    long long ultimo = bd.ultimoIdConversacion(nuevo, "R", idTexto);
+    bd.marcarLeido(nuevo, "R", idTexto, ultimo);
     enviarAVarios(miembros, "GRUPO|" + idTexto + "|" + sala.nombre + "|" + sala.dueno + "|" + unir(miembros));
+    enviarA(nuevo, "LECTURA|R|" + idTexto + "|" + to_string(ultimo));
     for (const auto& m : bd.historial("R", idTexto, 50)) {
         enviarA(nuevo, lineaMensaje(m, idTexto));
     }
@@ -745,7 +737,10 @@ void Servidor::cmdCanalUnir(const SesionPtr& s, const string& idTexto) {
     }
 
     bd.unirCanal(id, s->usuario);
+    long long ultimo = bd.ultimoIdConversacion(s->usuario, "C", idTexto);
+    bd.marcarLeido(s->usuario, "C", idTexto, ultimo);
     enviar(s, "CANAL|" + to_string(id) + "|" + canal.nombre + "|" + canal.dueno + "|1");
+    enviar(s, "LECTURA|C|" + idTexto + "|" + to_string(ultimo));
 
     // Al unirse ve todo lo que se envio antes al canal.
     for (const auto& m : bd.historial("C", to_string(id), 0)) {
@@ -796,9 +791,8 @@ void Servidor::cmdCanalEliminar(const SesionPtr& s, const string& idTexto) {
 
 void Servidor::cmdEliminarCuenta(const SesionPtr& s, const string& clave, bool& salir) {
     // Autenticacion adicional: evita borrados por un clic accidental o una sesion abierta.
-    string real, sal, hash;
-    if (!bd.credenciales(s->usuario, real, sal, hash) ||
-        !igualesSeguro(hash, hashClave(sal, clave))) {
+    string real, claveGuardada;
+    if (!bd.credenciales(s->usuario, real, claveGuardada) || claveGuardada != clave) {
         enviar(s, "AVISO|Contrasena incorrecta. No se elimino la cuenta.");
         return;
     }
@@ -861,6 +855,28 @@ void Servidor::cmdCanalMensaje(const SesionPtr& s, const string& idTexto, const 
     }
 
     enviarAVarios(bd.miembrosCanal(id), lineaMensaje(m, m.clave));
+}
+
+// Confirma lectura solo de conversaciones autorizadas. El cursor nunca puede
+// superar el ID realmente existente en esa conversacion.
+void Servidor::cmdMarcarLeido(const SesionPtr& s, const string& ambito,
+                             const string& clave, const string& idTexto) {
+    long long id;
+    if (!aNumero(idTexto, id) || id < 0) return;
+    if (ambito == "G") {
+        if (clave != "general") return;
+    } else if (ambito == "D") {
+        if (bd.nombreCanonico(clave).empty() || minusculas(clave) == minusculas(s->usuario)) return;
+    } else if (ambito == "R" || ambito == "C") {
+        long long sala;
+        if (!aNumero(clave, sala)) return;
+        if ((ambito == "R" && !bd.esMiembroGrupo(sala, s->usuario)) ||
+            (ambito == "C" && !bd.esMiembroCanal(sala, s->usuario))) return;
+    } else {
+        return;
+    }
+    long long maximo = bd.ultimoIdConversacion(s->usuario, ambito, clave);
+    bd.marcarLeido(s->usuario, ambito, clave, min(id, maximo));
 }
 
 void Servidor::cmdFoto(const SesionPtr& s, const string& usuario) {

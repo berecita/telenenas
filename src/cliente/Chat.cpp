@@ -209,7 +209,9 @@ void Chat::procesar(const string& linea) {
         }
 
         conv->ultimoId = id;
-        conv->nuevos = true;
+        // Los historiales ya leidos, y los mensajes escritos por mi,
+        // no producen puntos de notificacion.
+        if (c[5] != yo && id > conv->ultimoLeido) conv->nuevos = true;
         verUsuario(c[5]);
 
         MensajeVista m;
@@ -219,6 +221,16 @@ void Chat::procesar(const string& linea) {
         m.eliminado = (cmd == "MD");
         m.texto = m.eliminado ? "" : c[6];
         agregarMensaje(*conv, m);
+
+    } else if (cmd == "LECTURA" && c.size() >= 4) {
+        Conversacion* conv = buscar(c[1], c[2]);
+        if (conv == nullptr) return;
+        long long id = 0;
+        try { id = stoll(c[3]); } catch (...) { return; }
+        conv->ultimoLeido = max(conv->ultimoLeido, id);
+        // La lista de lectura llega antes que el historial de cada conversacion.
+        conv->nuevos = any_of(conv->mensajes.begin(), conv->mensajes.end(),
+                             [&](const MensajeVista& m) { return m.id > conv->ultimoLeido && m.autor != yo; });
 
     } else if (cmd == "DEL" && c.size() >= 4) {
         Conversacion* conv = buscar(c[1], c[2]);
@@ -282,7 +294,7 @@ void Chat::procesar(const string& linea) {
 
         if (nuevo) {
             ordenGrupos.push_back(g[1]);
-            conv.nuevos = true;
+            // Agregar una sala a la lista no equivale a recibir un mensaje.
         }
 
     } else if (cmd == "CANAL") {
