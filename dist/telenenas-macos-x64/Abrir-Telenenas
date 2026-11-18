@@ -1,0 +1,3 @@
+#!/bin/sh
+cd "$(dirname "$0")" || exit 1
+exec ./cliente "${1:-3.149.102.2}" "${2:-3041}"
