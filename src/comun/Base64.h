@@ -10,4 +10,3 @@ std::string base64Codificar(const unsigned char* datos, std::size_t tamano);
 bool base64Decodificar(const std::string& texto, std::string& salida);
 
 #endif
-

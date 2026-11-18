@@ -22,6 +22,7 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <iostream>
 #include <memory>
 #include <set>
 #include <string>
@@ -33,16 +34,19 @@ enum class Pantalla { LOGIN, CHAT };
 enum class Fase { EDITANDO, CONECTANDO, ESPERANDO };
 enum class Seccion { GENERAL, DIRECTOS, GRUPOS, CANALES };
 
-// ---- Colores (los mismos de upifood) ----
-static const sf::Color FONDO(245, 241, 233);
-static const sf::Color BARRA_LATERAL(74, 50, 35);
-static const sf::Color PANEL_LISTA(236, 229, 218);
-static const sf::Color TEXTO_OSCURO(50, 40, 35);
-static const sf::Color TEXTO_SUAVE(130, 120, 110);
-static const sf::Color ROJO_ERROR(180, 40, 40);
-static const sf::Color VERDE(40, 160, 90);
-static const sf::Color SELECCION(214, 196, 172);
-static const sf::Color NARANJA(220, 120, 30);
+// ---- Paleta rosa (basada en #FF99DC) ----
+static const sf::Color ROSA(255, 153, 220);          // #FF99DC (color principal)
+static const sf::Color FONDO(255, 244, 251);
+static const sf::Color BARRA_LATERAL = ROSA;
+static const sf::Color PANEL_LISTA(255, 225, 244);
+static const sf::Color TEXTO_OSCURO(74, 30, 64);     // ciruela
+static const sf::Color TEXTO_SUAVE(150, 100, 138);
+static const sf::Color ROJO_ERROR(200, 40, 90);
+static const sf::Color VERDE(30, 140, 90);           // "en linea"
+static const sf::Color SELECCION(255, 190, 232);
+static const sf::Color ACENTO(214, 60, 150);         // puntito de "mensajes nuevos"
+static const sf::Color BORDE(238, 190, 222);
+static const sf::Color BOTON_LATERAL(255, 232, 247); // botones sobre la barra rosa
 
 // ---- Medidas ----
 static const int ANCHO = 1000;
@@ -51,6 +55,16 @@ static const float LISTA_X = 200.0f;
 static const float LISTA_ANCHO = 210.0f;
 static const float LISTA_Y = 70.0f;
 static const float FILA_ALTO = 44.0f;
+
+// Selector de avatares de la pantalla de registro
+static const float AVATAR_X = 350.0f;
+static const float AVATAR_Y = 394.0f;
+static const float AVATAR_D = 48.0f;
+static const float AVATAR_PASO = 63.0f;
+
+// Control "eliminar" que aparece en el encabezado de MIS mensajes
+static const float BORRAR_X = AREA_X + AREA_ANCHO - 84.0f;
+static const float BORRAR_ANCHO = 70.0f;
 
 struct Intento {
     bool registro = false;
@@ -229,18 +243,24 @@ int main(int argc, char* argv[]) {
     ventana.abrir();
     sf::RenderWindow& win = ventana.getWindow();
 
+    Avatares avatares;
+    if (!avatares.cargarPredeterminados()) {
+        cerr << "Aviso: no se encontraron los avatares en recursos/avatares/." << endl;
+    }
+
     Conexion conexion;
     unique_ptr<Chat> chat;
     Pantalla pantalla = Pantalla::LOGIN;
 
     // =============== LOGIN ===============
-    CampoTexto campoIp("Servidor (IP o nombre)", 350, 140, 300, 42);
-    CampoTexto campoPuerto("Puerto", 350, 205, 300, 42);
-    CampoTexto campoUsuario("Usuario (máx. 16)", 350, 270, 300, 42);
-    CampoTexto campoClave("Contraseña (mín. 4)", 350, 335, 300, 42, true);
-    CampoTexto campoFoto("Foto de perfil: ruta de una imagen (opcional)", 350, 400, 300, 42);
-    Boton botonEntrar("Entrar", 350, 455, 145, 46);
-    Boton botonRegistro("Registrarme", 505, 455, 145, 46);
+    CampoTexto campoIp("Servidor (IP o nombre)", 350, 124, 300, 42);
+    CampoTexto campoPuerto("Puerto", 350, 190, 300, 42);
+    CampoTexto campoUsuario("Usuario (máx. 16)", 350, 256, 300, 42);
+    CampoTexto campoClave("Contraseña (mín. 4)", 350, 322, 300, 42, true);
+    CampoTexto campoFoto("O usa tu propia foto: ruta de una imagen", 350, 484, 300, 42);
+    Boton botonEntrar("Entrar", 350, 542, 145, 44);
+    Boton botonRegistro("Registrarme", 505, 542, 145, 44);
+    int avatarElegido = -1; // indice en AVATARES_PREDETERMINADOS (-1 = ninguno)
 
     campoIp.setMaxLongitud(60);
     campoIp.setContenido(argc > 1 ? argv[1] : "127.0.0.1");
@@ -266,6 +286,7 @@ int main(int argc, char* argv[]) {
     bool modoGrupo = false;       // estoy eligiendo los miembros de un grupo nuevo
     set<string> marcados;
     int scrollLista = 0;
+    long long confirmarBorrado = 0; // id del mensaje que esta esperando el 2do clic de "eliminar"
 
     CampoTexto campoMensaje("Mensaje", AREA_X, 560, 400, 42);
     campoMensaje.setMaxLongitud(MAX_TEXTO);
@@ -277,13 +298,14 @@ int main(int argc, char* argv[]) {
 
     Boton botonEnviar("Enviar", 835, 560, 150, 42);
     Boton botonSalir("Salir", 15, 575, 160, 44);
-    botonSalir.setColor(sf::Color(150, 130, 112));
+    botonSalir.setColor(sf::Color(255, 205, 236));
     Boton botonSeccion[4] = {Boton("General", 15, 100, 160, 44), Boton("Directos", 15, 152, 160, 44),
                              Boton("Grupos", 15, 204, 160, 44), Boton("Canales", 15, 256, 160, 44)};
+    for (Boton& b : botonSeccion) b.setColor(BOTON_LATERAL);
     Boton botonNuevoGrupo("Nuevo grupo", LISTA_X, 560, LISTA_ANCHO, 44);
     Boton botonCrearGrupo("Crear grupo", LISTA_X, 556, LISTA_ANCHO, 40);
     Boton botonCancelar("Cancelar", LISTA_X, 602, LISTA_ANCHO, 30);
-    botonCancelar.setColor(sf::Color(150, 130, 112));
+    botonCancelar.setColor(sf::Color(255, 205, 236));
     Boton botonCrearCanal("Crear canal", LISTA_X, 556, LISTA_ANCHO, 44);
     Boton botonUnirse("Unirme al canal", AREA_X + AREA_ANCHO / 2 - 100, AREA_Y + AREA_ALTO / 2 + 10, 200, 46);
 
@@ -326,9 +348,13 @@ int main(int argc, char* argv[]) {
             string rutaFoto = quitarEspacios(campoFoto.getContenido());
             string error;
 
-            if (!rutaFoto.empty() && !prepararFoto(rutaFoto, intento.foto, error)) {
-                mostrarError(error);
-                return;
+            if (!rutaFoto.empty()) {               // la foto propia tiene prioridad
+                if (!prepararFoto(rutaFoto, intento.foto, error)) {
+                    mostrarError(error);
+                    return;
+                }
+            } else if (avatarElegido >= 0) {       // o el animalito que eligio
+                intento.foto = string("animal:") + AVATARES_PREDETERMINADOS[avatarElegido];
             }
         }
 
@@ -363,7 +389,8 @@ int main(int argc, char* argv[]) {
         vector<string> c = separarMaximo(linea, 2);
 
         if (c[0] == "OK" && c.size() >= 2) {
-            chat = make_unique<Chat>(ventana);
+            avatares.limpiarUsuarios();
+            chat = make_unique<Chat>(ventana, avatares);
             chat->yo = c[1];
             pantalla = Pantalla::CHAT;
             seccion = Seccion::GENERAL;
@@ -398,6 +425,28 @@ int main(int argc, char* argv[]) {
         }
 
         return nullptr;
+    };
+
+    // Id del mensaje cuyo "eliminar" esta en (mx, my); 0 si no hay ninguno.
+    auto idEliminarEn = [&](const Conversacion* conv, float mx, float my) -> long long {
+        if (conv == nullptr || !conexion.estaActiva()) return 0;
+        if (seccion == Seccion::CANALES && !conv->unido) return 0;
+
+        const int total = static_cast<int>(conv->lineas.size());
+        const int inicio = max(0, total - LINEAS_VISIBLES - conv->desplazamiento);
+
+        for (int k = 0; k < LINEAS_VISIBLES && inicio + k < total; k++) {
+            const Linea& l = conv->lineas[static_cast<size_t>(inicio + k)];
+            if (l.idMensaje == 0 || !l.esMio) continue;
+
+            float y = AREA_Y + 6.0f + static_cast<float>(k) * ALTO_LINEA;
+
+            if (mx >= BORRAR_X && mx < BORRAR_X + BORRAR_ANCHO && my >= y && my < y + ALTO_LINEA) {
+                return l.idMensaje;
+            }
+        }
+
+        return 0;
     };
 
     // En canales solo escribe el dueño; en lo demas, cualquiera con la conversacion abierta.
@@ -500,6 +549,15 @@ int main(int argc, char* argv[]) {
                     float my = static_cast<float>(e.mouseButton.y);
 
                     clicEnCampos(camposLogin, mx, my);
+
+                    for (int i = 0; i < NUM_AVATARES; i++) { // elegir / quitar un animalito
+                        float dx = mx - (AVATAR_X + static_cast<float>(i) * AVATAR_PASO + AVATAR_D / 2);
+                        float dy = my - (AVATAR_Y + AVATAR_D / 2);
+                        if (dx * dx + dy * dy <= (AVATAR_D / 2) * (AVATAR_D / 2)) {
+                            avatarElegido = (avatarElegido == i) ? -1 : i;
+                        }
+                    }
+
                     if (botonEntrar.contiene(mx, my)) iniciarIntento(false);
                     if (botonRegistro.contiene(mx, my)) iniciarIntento(true);
                 }
@@ -547,6 +605,16 @@ int main(int argc, char* argv[]) {
                 float my = static_cast<float>(e.mouseButton.y);
 
                 clicEnCampos(visibles, mx, my);
+
+                // -- eliminar un mensaje mio: el primer clic pide confirmacion, el segundo lo borra --
+                long long idBorrar = idEliminarEn(conv, mx, my);
+
+                if (idBorrar != 0 && confirmarBorrado == idBorrar) {
+                    conexion.enviar("BORRAR|" + to_string(idBorrar));
+                    confirmarBorrado = 0;
+                } else {
+                    confirmarBorrado = idBorrar; // 0 si el clic fue en cualquier otro lado
+                }
 
                 // -- barra lateral --
                 for (int i = 0; i < 4; i++) {
@@ -655,16 +723,34 @@ int main(int argc, char* argv[]) {
             botonEntrar.actualizarHover(mx, my);
             botonRegistro.actualizarHover(mx, my);
 
-            ventana.dibujarTexto("Chat con sockets y SFML", 330, 38, 32, TEXTO_OSCURO);
-            ventana.dibujarTexto("Entra con tu cuenta o créate una (con foto, si quieres)", 306, 88, 16, TEXTO_SUAVE);
+            ventana.dibujarTexto("Chat con sockets y SFML", 322, 20, 30, TEXTO_OSCURO);
+            ventana.dibujarTexto("Entra con tu cuenta o créate una nueva", 332, 62, 15, TEXTO_SUAVE);
 
             for (CampoTexto* c : camposLogin) c->dibujar(ventana);
+
+            // Selector de avatar (animalitos predeterminados)
+            ventana.dibujarTexto("Elige un avatar (opcional, solo al registrarte)", AVATAR_X, 370, 15, TEXTO_SUAVE);
+
+            for (int i = 0; i < NUM_AVATARES; i++) {
+                float ax = AVATAR_X + static_cast<float>(i) * AVATAR_PASO;
+                float dx = mx - (ax + AVATAR_D / 2), dy = my - (AVATAR_Y + AVATAR_D / 2);
+                bool encima = dx * dx + dy * dy <= (AVATAR_D / 2) * (AVATAR_D / 2);
+
+                if (i == avatarElegido || encima) { // aro detras del avatar
+                    sf::CircleShape aro(AVATAR_D / 2 + 4.0f);
+                    aro.setPosition(ax - 4.0f, AVATAR_Y - 4.0f);
+                    aro.setFillColor(i == avatarElegido ? ACENTO : SELECCION);
+                    win.draw(aro);
+                }
+
+                avatares.dibujarPredeterminado(ventana, AVATARES_PREDETERMINADOS[i], ax, AVATAR_Y, AVATAR_D);
+            }
+
             botonEntrar.dibujar(ventana);
             botonRegistro.dibujar(ventana);
 
-            ventana.dibujarTexto(mensajeLogin, 350, 520, 16, mensajeEsError ? ROJO_ERROR : TEXTO_SUAVE);
-            ventana.dibujarTexto("Tab: cambiar de campo    Enter: entrar    Ctrl+V: pegar", 350, 592, 13, TEXTO_SUAVE);
-            ventana.dibujarTexto("La foto solo se usa al registrarte (png, jpg, bmp o tga).", 350, 610, 13, TEXTO_SUAVE);
+            ventana.dibujarTexto(mensajeLogin, 350, 594, 15, mensajeEsError ? ROJO_ERROR : TEXTO_SUAVE);
+            ventana.dibujarTexto("Tab: cambiar de campo    Enter: entrar    Ctrl+V: pegar", 350, 618, 12, TEXTO_SUAVE);
 
         } else {
             Chat& c = *chat;
@@ -692,9 +778,9 @@ int main(int argc, char* argv[]) {
             // ---- barra lateral ----
             rectangulo(ventana, 0, 0, 190, ALTO, BARRA_LATERAL);
             c.avatares.dibujar(ventana, c.yo, 15, 18, 44);
-            ventana.dibujarTexto(c.yo, 70, 20, 16, sf::Color::White);
+            ventana.dibujarTexto(c.yo, 70, 20, 16, TEXTO_OSCURO);
             ventana.dibujarTexto(conexion.estaActiva() ? "en línea" : "sin conexión", 70, 44, 13,
-                                 conexion.estaActiva() ? sf::Color(150, 220, 170) : sf::Color(240, 150, 150));
+                                 conexion.estaActiva() ? VERDE : ROJO_ERROR);
             for (int i = 0; i < 4; i++) botonSeccion[i].dibujar(ventana);
             botonSalir.dibujar(ventana);
 
@@ -732,13 +818,13 @@ int main(int argc, char* argv[]) {
 
                 if (seleccionado || hover) {
                     rectangulo(ventana, LISTA_X - 6, y, LISTA_ANCHO + 6, FILA_ALTO - 4,
-                               seleccionado ? SELECCION : sf::Color(225, 215, 200));
+                               seleccionado ? SELECCION : sf::Color(255, 208, 238));
                 }
 
                 float xTexto = LISTA_X + 4;
 
                 if (it.conCheck) {
-                    rectangulo(ventana, LISTA_X, y + 12, 18, 18, sf::Color(120, 100, 85));
+                    rectangulo(ventana, LISTA_X, y + 12, 18, 18, sf::Color(190, 120, 170));
                     rectangulo(ventana, LISTA_X + 2, y + 14, 14, 14, it.marcado ? VERDE : sf::Color::White);
                     xTexto = LISTA_X + 28;
                 }
@@ -754,7 +840,7 @@ int main(int argc, char* argv[]) {
                 if (it.nuevos) {
                     sf::CircleShape punto(5.0f);
                     punto.setPosition(LISTA_X + LISTA_ANCHO - 14, y + 14);
-                    punto.setFillColor(NARANJA);
+                    punto.setFillColor(ACENTO);
                     win.draw(punto);
                 }
             }
@@ -816,7 +902,7 @@ int main(int argc, char* argv[]) {
             zona.setPosition(AREA_X, AREA_Y);
             zona.setFillColor(sf::Color::White);
             zona.setOutlineThickness(2.0f);
-            zona.setOutlineColor(sf::Color(190, 180, 170));
+            zona.setOutlineColor(BORDE);
             win.draw(zona);
 
             bool mostrarMensajes = conv != nullptr && (seccion != Seccion::CANALES || conv->unido);
@@ -838,6 +924,14 @@ int main(int argc, char* argv[]) {
                     if (!l.secundario.empty()) {
                         ventana.dibujarTexto(l.secundario, AREA_X + 10.0f + l.xSecundario, y + 3.0f, 12, l.colorSecundario);
                     }
+
+                    if (l.idMensaje != 0 && l.esMio && conexion.estaActiva()) { // "eliminar" (2 clics)
+                        bool pendiente = (confirmarBorrado == l.idMensaje);
+                        bool encima = mx >= BORRAR_X && mx < BORRAR_X + BORRAR_ANCHO && my >= y && my < y + ALTO_LINEA;
+
+                        ventana.dibujarTexto(pendiente ? "¿seguro?" : "eliminar", BORRAR_X + 6.0f, y + 4.0f, 12,
+                                             pendiente ? ROJO_ERROR : (encima ? ACENTO : sf::Color(205, 160, 190)));
+                    }
                 }
 
                 if (total == 0) {
@@ -853,7 +947,7 @@ int main(int argc, char* argv[]) {
                                           static_cast<float>(total - LINEAS_VISIBLES);
 
                     rectangulo(ventana, AREA_X + AREA_ANCHO - 10.0f, AREA_Y + 4.0f + recorrido * avance,
-                               6.0f, altoBarra, sf::Color(200, 190, 178));
+                               6.0f, altoBarra, sf::Color(240, 175, 215));
                 }
 
                 if (conv->desplazamiento > 0) {
@@ -890,7 +984,7 @@ int main(int argc, char* argv[]) {
                 if (!conexion.estaActiva()) motivo = "Sin conexión con el servidor";
                 else if (seccion == Seccion::CANALES && conv) motivo = conv->unido ? "En este canal solo escribe su dueño" : "Únete al canal para leerlo";
 
-                rectangulo(ventana, AREA_X, 560, AREA_ANCHO, 42, sf::Color(228, 221, 210));
+                rectangulo(ventana, AREA_X, 560, AREA_ANCHO, 42, sf::Color(255, 228, 245));
                 ventana.dibujarTexto(motivo, AREA_X + 12, 570, 16, TEXTO_SUAVE);
             }
 
@@ -911,4 +1005,3 @@ int main(int argc, char* argv[]) {
     conexion.cerrar();
     return 0;
 }
-

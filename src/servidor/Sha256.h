@@ -7,4 +7,3 @@
 std::string sha256Hex(const std::string& datos);
 
 #endif
-

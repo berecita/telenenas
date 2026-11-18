@@ -9,7 +9,8 @@
 //  mensaje puede llevar '|' sin problema.
 //
 //  CLIENTE -> SERVIDOR
-//    REGISTRO|usuario|clave|foto      crea la cuenta y entra (foto = base64 o vacio)
+//    REGISTRO|usuario|clave|perfil    crea la cuenta y entra. perfil = "" (sin foto),
+//                                     "animal:gato" (avatar predeterminado) o base64 (foto propia)
 //    LOGIN|usuario|clave              entra con una cuenta existente
 //    GENERAL|texto                    mensaje al chat general
 //    DM|destino|texto                 mensaje directo
@@ -18,6 +19,7 @@
 //    CANAL_NUEVO|nombre               crea un canal (el creador es el dueño)
 //    CANAL_UNIR|idCanal               se une a un canal
 //    CMSG|idCanal|texto               mensaje a un canal (solo el dueño)
+//    BORRAR|idMensaje                 elimina un mensaje PROPIO (para todos)
 //    FOTO_PEDIR|usuario               pide la foto de perfil de alguien
 //    SALIR
 //
@@ -31,7 +33,8 @@
 //          clave : "general" / el OTRO usuario / id de grupo / id de canal
 //    GRUPO|id|nombre|dueno|m1,m2,...
 //    CANAL|id|nombre|dueno|unido(0/1)
-//    FOTO|usuario|base64              (base64 vacio = no tiene foto)
+//    DEL|ambito|clave|id              un mensaje fue eliminado (mismas claves que M)
+//    FOTO|usuario|perfil              perfil = "" / "animal:gato" / base64
 // =====================================================================
 
 #include <cstddef>
@@ -45,6 +48,17 @@ const int PUERTO_POR_DEFECTO = 5000;
 const int FOTO_LADO = 64;
 const std::size_t FOTO_BYTES = static_cast<std::size_t>(FOTO_LADO) * FOTO_LADO * 4;
 const std::size_t FOTO_B64_LONGITUD = ((FOTO_BYTES + 2) / 3) * 4;
+
+// Avatares predeterminados (imagenes en recursos/avatares/<nombre>.png).
+const int NUM_AVATARES = 5;
+const char* const AVATARES_PREDETERMINADOS[NUM_AVATARES] = {"gato", "perro", "conejo", "oso", "zorro"};
+
+inline bool esAvatarPredeterminado(const std::string& nombre) {
+    for (const char* a : AVATARES_PREDETERMINADOS) {
+        if (nombre == a) return true;
+    }
+    return false;
+}
 
 const std::size_t MAX_LINEA = 65536;   // bytes por linea del protocolo
 const std::size_t MAX_TEXTO = 500;     // bytes por mensaje de chat
@@ -76,4 +90,3 @@ inline std::vector<std::string> separarMaximo(const std::string& mensaje, std::s
 }
 
 #endif
-

@@ -29,6 +29,17 @@ struct Linea {
     float x = 0;             // donde empieza `principal` (relativo al borde de la zona)
     float xSecundario = 0;
     std::string avatar;      // usuario cuya foto se dibuja (solo en el encabezado)
+    long long idMensaje = 0; // solo en el encabezado: a que mensaje pertenece
+    bool esMio = false;      // solo en el encabezado: lo escribi yo (puedo eliminarlo)
+};
+
+// Un mensaje tal como lo mando el servidor. De aqui se calculan las `Linea`s (y se
+// vuelven a calcular cuando se elimina un mensaje).
+struct MensajeVista {
+    long long id = 0;
+    std::string hora;
+    std::string autor;
+    std::string texto;
 };
 
 // Una conversacion: el chat general, un directo, un grupo o un canal.
@@ -41,6 +52,7 @@ struct Conversacion {
     bool nuevos = false;               // hay mensajes sin leer
     long long ultimoId = 0;            // para ignorar mensajes repetidos
     int desplazamiento = 0;            // cuantas lineas estoy "arriba" del final (0 = viendo lo ultimo)
+    std::vector<MensajeVista> mensajes;
     std::vector<Linea> lineas;
 };
 
@@ -51,11 +63,13 @@ private:
     std::vector<std::string> porPedir;
 
     void verUsuario(const std::string& usuario);
-    void agregarMensaje(Conversacion& conv, const std::string& hora, const std::string& autor,
-                        const std::string& texto);
+    void agregarLineas(Conversacion& conv, const MensajeVista& m);
+    void agregarMensaje(Conversacion& conv, const MensajeVista& m);
+    void reconstruir(Conversacion& conv);
+    Conversacion* buscar(const std::string& ambito, const std::string& clave);
 
 public:
-    explicit Chat(Ventana& v) : ventana(v) {}
+    Chat(Ventana& v, Avatares& a) : ventana(v), avatares(a) {}
 
     std::string yo;
     Conversacion general;
@@ -64,7 +78,7 @@ public:
     std::map<std::string, Conversacion> canales;  // clave: id
     std::vector<std::string> ordenGrupos, ordenCanales;
     std::vector<std::string> enLinea;
-    Avatares avatares;
+    Avatares& avatares; // lo tiene mainCliente (tambien lo usa la pantalla de login)
 
     std::string aviso;      // ultimo AVISO del servidor (se muestra unos segundos)
     sf::Clock relojAviso;
@@ -80,4 +94,3 @@ public:
 };
 
 #endif
-

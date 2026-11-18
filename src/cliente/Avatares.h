@@ -14,22 +14,35 @@
 bool prepararFoto(const std::string& ruta, std::string& base64, std::string& error);
 
 // Guarda las fotos de perfil ya recibidas (como texturas) y sabe dibujarlas.
-// Si alguien no tiene foto, dibuja un circulo de color con su inicial.
+// Un "perfil" que manda el servidor puede ser:
+//     ""            -> sin foto: se dibuja un circulo de color con la inicial
+//     "animal:gato" -> uno de los avatares predeterminados (recursos/avatares/gato.png)
+//     base64        -> foto propia de 64x64 RGBA
 class Avatares {
 private:
-    std::map<std::string, sf::Texture> texturas; // clave: usuario en minusculas
+    std::map<std::string, sf::Texture> texturas;       // usuario (minusculas) -> su foto
+    std::map<std::string, sf::Texture> predeterminados; // "gato" -> textura
     std::set<std::string> sinFoto;
     std::set<std::string> pedidas;
 
+    void dibujarCirculo(Ventana& ventana, const sf::Texture* textura, float x, float y, float diametro,
+                        const std::string& nombre);
+
 public:
+    // Carga los 5 animalitos de recursos/avatares/. Regresa false si falta alguno.
+    bool cargarPredeterminados();
+
+    // Olvida las fotos de usuarios (se usa al iniciar una sesion nueva).
+    void limpiarUsuarios();
+
     // true UNA sola vez por usuario: indica que hay que mandar FOTO_PEDIR.
     bool necesitaPedir(const std::string& usuario);
 
-    // Llega "FOTO|usuario|base64" (base64 vacio = sin foto).
-    void recibir(const std::string& usuario, const std::string& base64);
+    // Llega "FOTO|usuario|perfil".
+    void recibir(const std::string& usuario, const std::string& perfil);
 
     void dibujar(Ventana& ventana, const std::string& usuario, float x, float y, float diametro);
+    void dibujarPredeterminado(Ventana& ventana, const std::string& animal, float x, float y, float diametro);
 };
 
 #endif
-

@@ -4,14 +4,14 @@
 
 using namespace std;
 
-static const sf::Color TEXTO_OSCURO(50, 40, 35);
-static const sf::Color TEXTO_SUAVE(130, 120, 110);
-static const sf::Color VERDE(40, 160, 90);
-static const sf::Color AZUL(60, 110, 180);
+static const sf::Color TEXTO_OSCURO(74, 30, 64);
+static const sf::Color TEXTO_SUAVE(150, 100, 138);
+static const sf::Color NOMBRE_MIO(214, 60, 150);
+static const sf::Color NOMBRE_OTRO(112, 82, 190);
 
 static const float SANGRIA = 32.0f;                              // espacio del avatar
 static const float ANCHO_TEXTO = AREA_ANCHO - 10.0f - SANGRIA - 18.0f; // margen derecho y barra de scroll
-static const size_t MAX_LINEAS = 1500;                           // historial maximo por conversacion
+static const size_t MAX_MENSAJES = 600;                          // historial maximo por conversacion
 
 // ---------------------------------------------------------------------
 // Ajuste de texto
@@ -106,38 +106,76 @@ Conversacion& Chat::directo(const string& usuario) {
     return it->second;
 }
 
-void Chat::agregarMensaje(Conversacion& conv, const string& hora, const string& autor, const string& texto) {
-    bool mio = (autor == yo);
-    float anchoNombre = ventana.medirTexto(autor, TAM_LETRA);
+// Convierte un mensaje en lineas ya ajustadas al ancho de la zona.
+void Chat::agregarLineas(Conversacion& conv, const MensajeVista& m) {
+    bool mio = (m.autor == yo);
+    float anchoNombre = ventana.medirTexto(m.autor, TAM_LETRA);
 
     Linea encabezado;
-    encabezado.principal = autor;
-    encabezado.colorPrincipal = mio ? VERDE : AZUL;
-    encabezado.secundario = hora;
+    encabezado.principal = m.autor;
+    encabezado.colorPrincipal = mio ? NOMBRE_MIO : NOMBRE_OTRO;
+    encabezado.secundario = m.hora;
     encabezado.colorSecundario = TEXTO_SUAVE;
     encabezado.x = SANGRIA;
     encabezado.xSecundario = SANGRIA + anchoNombre + 10.0f;
-    encabezado.avatar = autor;
+    encabezado.avatar = m.autor;
+    encabezado.idMensaje = m.id;
+    encabezado.esMio = mio;
     conv.lineas.push_back(encabezado);
 
-    vector<string> partes = ajustar(ventana, texto, TAM_LETRA, ANCHO_TEXTO);
-
-    for (const string& parte : partes) {
+    for (const string& parte : ajustar(ventana, m.texto, TAM_LETRA, ANCHO_TEXTO)) {
         Linea l;
         l.principal = parte;
         l.colorPrincipal = TEXTO_OSCURO;
         l.x = SANGRIA;
         conv.lineas.push_back(l);
     }
+}
+
+// Vuelve a calcular todas las lineas a partir de los mensajes (al eliminar uno).
+void Chat::reconstruir(Conversacion& conv) {
+    conv.lineas.clear();
+
+    for (const MensajeVista& m : conv.mensajes) {
+        agregarLineas(conv, m);
+    }
+}
+
+void Chat::agregarMensaje(Conversacion& conv, const MensajeVista& m) {
+    size_t antes = conv.lineas.size();
+
+    conv.mensajes.push_back(m);
+    agregarLineas(conv, m);
 
     // Si estoy leyendo mensajes viejos, que la vista no salte con los nuevos.
     if (conv.desplazamiento > 0) {
-        conv.desplazamiento += static_cast<int>(partes.size()) + 1;
+        conv.desplazamiento += static_cast<int>(conv.lineas.size() - antes);
     }
 
-    if (conv.lineas.size() > MAX_LINEAS) {
-        conv.lineas.erase(conv.lineas.begin(), conv.lineas.begin() + (conv.lineas.size() - MAX_LINEAS));
+    if (conv.mensajes.size() > MAX_MENSAJES) {
+        conv.mensajes.erase(conv.mensajes.begin());
+        reconstruir(conv);
     }
+}
+
+// La conversacion a la que pertenece un mensaje (ambito + clave, como las manda el servidor).
+Conversacion* Chat::buscar(const string& ambito, const string& clave) {
+    if (ambito == "G") {
+        return &general;
+    }
+
+    if (ambito == "D") {
+        return &directo(clave);
+    }
+
+    map<string, Conversacion>& tabla = (ambito == "R") ? grupos : canales;
+
+    if (ambito != "R" && ambito != "C") {
+        return nullptr;
+    }
+
+    auto it = tabla.find(clave);
+    return it == tabla.end() ? nullptr : &it->second;
 }
 
 void Chat::procesar(const string& linea) {
@@ -145,21 +183,7 @@ void Chat::procesar(const string& linea) {
     const string& cmd = c[0];
 
     if (cmd == "M" && c.size() >= 7) {
-        const string& ambito = c[1];
-        const string& clave = c[2];
-        Conversacion* conv = nullptr;
-
-        if (ambito == "G") {
-            conv = &general;
-        } else if (ambito == "D") {
-            conv = &directo(clave);
-        } else if (ambito == "R") {
-            auto it = grupos.find(clave);
-            if (it != grupos.end()) conv = &it->second;
-        } else if (ambito == "C") {
-            auto it = canales.find(clave);
-            if (it != canales.end()) conv = &it->second;
-        }
+        Conversacion* conv = buscar(c[1], c[2]);
 
         long long id = 0;
         try { id = stoll(c[3]); } catch (...) { return; }
@@ -171,7 +195,29 @@ void Chat::procesar(const string& linea) {
         conv->ultimoId = id;
         conv->nuevos = true;
         verUsuario(c[5]);
-        agregarMensaje(*conv, c[4], c[5], c[6]);
+
+        MensajeVista m;
+        m.id = id;
+        m.hora = c[4];
+        m.autor = c[5];
+        m.texto = c[6];
+        agregarMensaje(*conv, m);
+
+    } else if (cmd == "DEL" && c.size() >= 4) {
+        Conversacion* conv = buscar(c[1], c[2]);
+
+        long long id = 0;
+        try { id = stoll(c[3]); } catch (...) { return; }
+
+        if (conv == nullptr) return;
+
+        for (auto it = conv->mensajes.begin(); it != conv->mensajes.end(); ++it) {
+            if (it->id == id) {
+                conv->mensajes.erase(it);
+                reconstruir(*conv);
+                break;
+            }
+        }
 
     } else if (cmd == "USERS") {
         enLinea.clear();
@@ -246,4 +292,3 @@ void Chat::procesar(const string& linea) {
         relojAviso.restart();
     }
 }
-

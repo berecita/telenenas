@@ -1,13 +1,13 @@
 #include "Widgets.h"
 #include <algorithm>
 
-// Paleta (tonos cafe/crema, acorde a una cafeteria)
-static const sf::Color CAFE_NORMAL(111, 78, 55);
-static const sf::Color CAFE_HOVER(140, 102, 74);
-static const sf::Color CAFE_ACTIVO(74, 50, 35);
-static const sf::Color GRIS_BORDE(190, 180, 170);
-static const sf::Color TEXTO_OSCURO(50, 40, 35);
-static const sf::Color TEXTO_SUAVE(130, 120, 110);
+// Paleta rosa, basada en #FF99DC
+static const sf::Color ROSA_NORMAL(255, 153, 220);   // #FF99DC
+static const sf::Color ROSA_HOVER(255, 120, 207);
+static const sf::Color ROSA_ACTIVO(232, 98, 186);
+static const sf::Color GRIS_BORDE(238, 190, 222);
+static const sf::Color TEXTO_OSCURO(74, 30, 64);     // ciruela
+static const sf::Color TEXTO_SUAVE(150, 100, 138);
 
 // ----------------------------- Boton -----------------------------
 
@@ -16,9 +16,10 @@ Boton::Boton() : hover(false), activo(false) {
 
 void Boton::setColor(const sf::Color& normal) {
     colorNormal = normal;
-    colorHover = sf::Color(static_cast<sf::Uint8>(std::min(255, normal.r + 30)),
-                           static_cast<sf::Uint8>(std::min(255, normal.g + 30)),
-                           static_cast<sf::Uint8>(std::min(255, normal.b + 30)));
+    // al pasar el mouse el boton se oscurece un poco
+    colorHover = sf::Color(static_cast<sf::Uint8>(std::max(0, normal.r - 28)),
+                           static_cast<sf::Uint8>(std::max(0, normal.g - 28)),
+                           static_cast<sf::Uint8>(std::max(0, normal.b - 28)));
 }
 
 Boton::Boton(const std::string& textoBoton, float x, float y, float ancho, float alto)
@@ -46,7 +47,7 @@ void Boton::actualizarHover(float x, float y) {
 
 void Boton::dibujar(Ventana& ventana) {
     if (activo) {
-        forma.setFillColor(CAFE_ACTIVO);
+        forma.setFillColor(ROSA_ACTIVO);
     } else if (hover) {
         forma.setFillColor(colorHover);
     } else {
@@ -54,7 +55,7 @@ void Boton::dibujar(Ventana& ventana) {
     }
 
     ventana.getWindow().draw(forma);
-    ventana.dibujarTextoCentrado(texto, forma.getGlobalBounds(), 18, sf::Color::White);
+    ventana.dibujarTextoCentrado(texto, forma.getGlobalBounds(), 18, TEXTO_OSCURO);
 }
 
 // --------------------------- CampoTexto ---------------------------
@@ -176,7 +177,7 @@ void CampoTexto::limpiar() {
 }
 
 void CampoTexto::dibujar(Ventana& ventana) {
-    forma.setOutlineColor(enfocado ? CAFE_NORMAL : GRIS_BORDE);
+    forma.setOutlineColor(enfocado ? ROSA_NORMAL : GRIS_BORDE);
     ventana.getWindow().draw(forma);
 
     sf::FloatRect r = forma.getGlobalBounds();
@@ -203,4 +204,3 @@ void CampoTexto::dibujar(Ventana& ventana) {
 
     ventana.dibujarTexto(mostrado, r.left + 10.0f, r.top + 8.0f, 20, TEXTO_OSCURO);
 }
-

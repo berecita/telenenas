@@ -166,4 +166,3 @@ void Ventana::loop() {
         window.display();
     }
 }
-

@@ -105,4 +105,3 @@ void Conexion::cerrar() {
     entrada.clear();
     salida.clear();
 }
-

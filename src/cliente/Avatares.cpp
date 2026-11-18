@@ -76,17 +76,74 @@ bool prepararFoto(const std::string& rutaCruda, std::string& base64, std::string
     return true;
 }
 
+static bool cargarRecurso(sf::Texture& textura, const std::string& relativa) {
+    std::vector<std::string> candidatas;
+
+#ifdef RECURSOS_DIR
+    candidatas.push_back(std::string(RECURSOS_DIR) + "/" + relativa); // ruta absoluta desde CMake
+#endif
+    candidatas.push_back("recursos/" + relativa);
+    candidatas.push_back("../recursos/" + relativa);
+    candidatas.push_back("../../recursos/" + relativa);
+
+    for (const std::string& ruta : candidatas) {
+        if (textura.loadFromFile(ruta)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool Avatares::cargarPredeterminados() {
+    bool todos = true;
+
+    for (const char* animal : AVATARES_PREDETERMINADOS) {
+        sf::Texture& textura = predeterminados[animal];
+
+        if (cargarRecurso(textura, std::string("avatares/") + animal + ".png")) {
+            textura.setSmooth(true);
+        } else {
+            predeterminados.erase(animal);
+            todos = false;
+        }
+    }
+
+    return todos;
+}
+
+void Avatares::limpiarUsuarios() {
+    texturas.clear();
+    sinFoto.clear();
+    pedidas.clear();
+}
+
 bool Avatares::necesitaPedir(const std::string& usuario) {
     return pedidas.insert(minusculas(usuario)).second;
 }
 
-void Avatares::recibir(const std::string& usuario, const std::string& base64) {
+void Avatares::recibir(const std::string& usuario, const std::string& perfil) {
     std::string clave = minusculas(usuario);
     pedidas.insert(clave);
 
+    // Avatar predeterminado: se reutiliza la imagen ya cargada.
+    if (perfil.rfind("animal:", 0) == 0) {
+        auto it = predeterminados.find(perfil.substr(7));
+
+        if (it != predeterminados.end()) {
+            texturas[clave] = it->second;
+            sinFoto.erase(clave);
+        } else {
+            sinFoto.insert(clave);
+        }
+
+        return;
+    }
+
+    // Foto propia en base64.
     std::string bytes;
 
-    if (base64.empty() || !base64Decodificar(base64, bytes) || bytes.size() != FOTO_BYTES) {
+    if (perfil.empty() || !base64Decodificar(perfil, bytes) || bytes.size() != FOTO_BYTES) {
         sinFoto.insert(clave);
         return;
     }
@@ -105,27 +162,25 @@ void Avatares::recibir(const std::string& usuario, const std::string& base64) {
     }
 }
 
-void Avatares::dibujar(Ventana& ventana, const std::string& usuario, float x, float y, float diametro) {
-    std::string clave = minusculas(usuario);
-
+// Dibuja la textura recortada en circulo; si no hay, un circulo de color con la inicial.
+void Avatares::dibujarCirculo(Ventana& ventana, const sf::Texture* textura, float x, float y,
+                              float diametro, const std::string& nombre) {
     sf::CircleShape circulo(diametro / 2.0f);
     circulo.setPosition(x, y);
 
-    auto it = texturas.find(clave);
-
-    if (it != texturas.end()) {
-        circulo.setTexture(&it->second, true); // la foto se recorta en forma de circulo
+    if (textura != nullptr) {
+        circulo.setTexture(textura, true); // la imagen cuadrada se ve recortada en circulo
         ventana.getWindow().draw(circulo);
         return;
     }
 
-    // Sin foto (o aun no llega): circulo de color segun el nombre + inicial.
+    // Colores rosas/lilas, uno por nombre.
     static const sf::Color PALETA[] = {
-        sf::Color(111, 78, 55), sf::Color(60, 110, 180), sf::Color(40, 160, 90), sf::Color(180, 90, 60),
-        sf::Color(130, 60, 160), sf::Color(190, 140, 40), sf::Color(50, 140, 150), sf::Color(170, 70, 110)};
+        sf::Color(214, 82, 170), sf::Color(150, 110, 210), sf::Color(235, 110, 140), sf::Color(190, 90, 200),
+        sf::Color(240, 130, 180), sf::Color(120, 130, 220), sf::Color(220, 100, 120), sf::Color(170, 100, 170)};
 
     unsigned int suma = 0;
-    for (unsigned char c : clave) suma = suma * 31 + c;
+    for (unsigned char c : minusculas(nombre)) suma = suma * 31 + c;
 
     circulo.setFillColor(PALETA[suma % 8]);
     ventana.getWindow().draw(circulo);
@@ -133,10 +188,10 @@ void Avatares::dibujar(Ventana& ventana, const std::string& usuario, float x, fl
     // Inicial (primer caracter UTF-8 completo).
     std::string inicial;
 
-    if (!usuario.empty()) {
+    if (!nombre.empty()) {
         std::size_t n = 1;
-        while (n < usuario.size() && (static_cast<unsigned char>(usuario[n]) & 0xC0) == 0x80) n++;
-        inicial = usuario.substr(0, n);
+        while (n < nombre.size() && (static_cast<unsigned char>(nombre[n]) & 0xC0) == 0x80) n++;
+        inicial = nombre.substr(0, n);
 
         if (n == 1) inicial[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(inicial[0])));
     }
@@ -145,3 +200,13 @@ void Avatares::dibujar(Ventana& ventana, const std::string& usuario, float x, fl
                                  static_cast<unsigned int>(diametro * 0.55f), sf::Color::White);
 }
 
+void Avatares::dibujar(Ventana& ventana, const std::string& usuario, float x, float y, float diametro) {
+    auto it = texturas.find(minusculas(usuario));
+    dibujarCirculo(ventana, it != texturas.end() ? &it->second : nullptr, x, y, diametro, usuario);
+}
+
+void Avatares::dibujarPredeterminado(Ventana& ventana, const std::string& animal, float x, float y,
+                                     float diametro) {
+    auto it = predeterminados.find(animal);
+    dibujarCirculo(ventana, it != predeterminados.end() ? &it->second : nullptr, x, y, diametro, animal);
+}

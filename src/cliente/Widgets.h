@@ -6,7 +6,7 @@
 #include "Ventana.h"
 
 // ---------------------------------------------------------------------
-// Componentes de interfaz reutilizables (para admin, cafeteria y cliente).
+// Componentes de interfaz reutilizables (Boton y CampoTexto).
 // SFML NO trae botones ni campos de texto: solo dibuja formas y texto.
 // Por eso aqui los armamos: un rectangulo + un texto + logica de "el mouse
 // esta encima" / "me hicieron clic" / "estoy recibiendo teclas".
@@ -18,8 +18,8 @@ private:
     std::string texto;
     bool hover;   // el mouse esta encima
     bool activo;  // es la "pestana" seleccionada actualmente
-    sf::Color colorNormal = sf::Color(111, 78, 55);
-    sf::Color colorHover = sf::Color(140, 102, 74);
+    sf::Color colorNormal = sf::Color(255, 153, 220); // #FF99DC
+    sf::Color colorHover = sf::Color(255, 120, 207);
 
 public:
     Boton();
@@ -76,4 +76,3 @@ public:
 };
 
 #endif
-

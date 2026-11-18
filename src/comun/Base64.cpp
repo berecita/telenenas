@@ -70,4 +70,3 @@ bool base64Decodificar(const std::string& texto, std::string& salida) {
 
     return true;
 }
-

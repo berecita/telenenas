@@ -77,4 +77,3 @@ if(BUILD_CLIENTE)
 		COMMAND ${CMAKE_COMMAND} -E copy_directory
 			"${CMAKE_SOURCE_DIR}/recursos" "$<TARGET_FILE_DIR:cliente>/recursos")
 endif()
-

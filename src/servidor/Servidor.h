@@ -56,6 +56,7 @@ private:
     void cmdCanalNuevo(const SesionPtr& s, const std::string& nombre);
     void cmdCanalUnir(const SesionPtr& s, const std::string& id);
     void cmdCanalMensaje(const SesionPtr& s, const std::string& id, const std::string& texto);
+    void cmdBorrar(const SesionPtr& s, const std::string& id);
     void cmdFoto(const SesionPtr& s, const std::string& usuario);
 
 public:
@@ -66,4 +67,3 @@ public:
 };
 
 #endif
-

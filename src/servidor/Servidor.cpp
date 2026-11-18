@@ -87,17 +87,25 @@ static string validarNombre(const string& nombre, size_t maxCaracteres, const st
     return "";
 }
 
-static string fechaTexto(long long fecha) {
-    time_t t = static_cast<time_t>(fecha);
-    time_t ahora = time(nullptr);
-    tm a, b;
-    localtime_r(&t, &a);
-    localtime_r(&ahora, &b);
+// La base de datos guarda la fecha como texto "AAAA-MM-DD HH:MM:SS" (hora local).
+// Al cliente le mandamos "HH:MM" si es de hoy, o "DD/MM HH:MM" si es de otro dia.
+static string fechaTexto(const string& fecha) {
+    if (fecha.size() < 16) return fecha;
 
-    char buffer[32];
-    bool hoy = a.tm_year == b.tm_year && a.tm_yday == b.tm_yday;
-    strftime(buffer, sizeof(buffer), hoy ? "%H:%M" : "%d/%m %H:%M", &a);
-    return buffer;
+    time_t ahora = time(nullptr);
+    tm local;
+    localtime_r(&ahora, &local);
+
+    char hoy[16];
+    strftime(hoy, sizeof(hoy), "%Y-%m-%d", &local);
+
+    string hora = fecha.substr(11, 5);
+
+    if (fecha.compare(0, 10, hoy) == 0) {
+        return hora;
+    }
+
+    return fecha.substr(8, 2) + "/" + fecha.substr(5, 2) + " " + hora;
 }
 
 static string unir(const vector<string>& v, char separador = ',') {
@@ -279,7 +287,8 @@ bool Servidor::autenticar(const SesionPtr& s) {
         if (c[0] == "REGISTRO" && c.size() >= 3) {
             nombre = recortar(c[1]);
             const string& clave = c[2];
-            string foto = (c.size() >= 4) ? c[3] : "";
+            string perfil = (c.size() >= 4) ? c[3] : "";
+            string avatar, foto;
 
             motivo = validarNombre(nombre, MAX_NOMBRE_USUARIO, "usuario");
 
@@ -292,11 +301,19 @@ bool Servidor::autenticar(const SesionPtr& s) {
                 motivo = "La contrasena no puede llevar '|'.";
             }
 
-            if (motivo.empty() && !foto.empty()) {
-                string bytes;
-                if (foto.size() != FOTO_B64_LONGITUD || !base64Decodificar(foto, bytes) ||
-                    bytes.size() != FOTO_BYTES) {
-                    motivo = "La foto de perfil no es valida.";
+            if (motivo.empty() && !perfil.empty()) {
+                if (perfil.rfind("animal:", 0) == 0) {            // avatar predeterminado
+                    avatar = perfil.substr(7);
+                    if (!esAvatarPredeterminado(avatar)) motivo = "Ese avatar no existe.";
+                } else {                                          // foto propia (base64)
+                    string bytes;
+                    if (perfil.size() != FOTO_B64_LONGITUD || !base64Decodificar(perfil, bytes) ||
+                        bytes.size() != FOTO_BYTES) {
+                        motivo = "La foto de perfil no es valida.";
+                    } else {
+                        avatar = "foto";
+                        foto = perfil;
+                    }
                 }
             }
 
@@ -307,7 +324,7 @@ bool Servidor::autenticar(const SesionPtr& s) {
             if (motivo.empty()) {
                 string sal = generarSal();
 
-                if (!bd.crearUsuario(nombre, sal, hashClave(sal, clave), foto)) {
+                if (!bd.crearUsuario(nombre, sal, hashClave(sal, clave), avatar, foto)) {
                     motivo = "No se pudo crear la cuenta.";
                 } else {
                     nombreReal = nombre;
@@ -439,6 +456,9 @@ void Servidor::procesarComando(const SesionPtr& s, const string& linea, bool& sa
     } else if (cmd == "CANAL_UNIR") {
         vector<string> d = separarMaximo(linea, 2);
         if (d.size() >= 2) cmdCanalUnir(s, d[1]);
+    } else if (cmd == "BORRAR") {
+        vector<string> d = separarMaximo(linea, 2);
+        if (d.size() >= 2) cmdBorrar(s, d[1]);
     } else if (cmd == "FOTO_PEDIR") {
         vector<string> d = separarMaximo(linea, 2);
         if (d.size() >= 2) cmdFoto(s, d[1]);
@@ -472,10 +492,8 @@ void Servidor::cmdGeneral(const SesionPtr& s, const string& textoCrudo) {
     m.clave = "general";
     m.autor = s->usuario;
     m.texto = texto;
-    m.fecha = time(nullptr);
-    m.id = bd.guardarMensaje(m.ambito, m.clave, m.autor, "", m.texto, m.fecha);
 
-    if (m.id < 0) {
+    if (!bd.guardarMensaje(m)) {
         enviar(s, "AVISO|No se pudo guardar el mensaje.");
         return;
     }
@@ -505,10 +523,8 @@ void Servidor::cmdDirecto(const SesionPtr& s, const string& destinoCrudo, const 
     m.autor = s->usuario;
     m.destino = destino;
     m.texto = texto;
-    m.fecha = time(nullptr);
-    m.id = bd.guardarMensaje("D", "", m.autor, destino, texto, m.fecha);
 
-    if (m.id < 0) {
+    if (!bd.guardarMensaje(m)) {
         enviar(s, "AVISO|No se pudo guardar el mensaje.");
         return;
     }
@@ -576,10 +592,8 @@ void Servidor::cmdGrupoMensaje(const SesionPtr& s, const string& idTexto, const 
     m.clave = to_string(id);
     m.autor = s->usuario;
     m.texto = texto;
-    m.fecha = time(nullptr);
-    m.id = bd.guardarMensaje("R", m.clave, m.autor, "", texto, m.fecha);
 
-    if (m.id < 0) {
+    if (!bd.guardarMensaje(m)) {
         enviar(s, "AVISO|No se pudo guardar el mensaje.");
         return;
     }
@@ -663,10 +677,8 @@ void Servidor::cmdCanalMensaje(const SesionPtr& s, const string& idTexto, const 
     m.clave = to_string(id);
     m.autor = s->usuario;
     m.texto = texto;
-    m.fecha = time(nullptr);
-    m.id = bd.guardarMensaje("C", m.clave, m.autor, "", texto, m.fecha);
 
-    if (m.id < 0) {
+    if (!bd.guardarMensaje(m)) {
         enviar(s, "AVISO|No se pudo guardar el mensaje.");
         return;
     }
@@ -678,7 +690,50 @@ void Servidor::cmdFoto(const SesionPtr& s, const string& usuario) {
     string real = bd.nombreCanonico(recortar(usuario));
     if (real.empty()) return;
 
-    enviar(s, "FOTO|" + real + "|" + bd.foto(real));
+    string avatar, foto;
+    bd.perfil(real, avatar, foto);
+
+    // perfil: "" (sin foto), "animal:gato" o la foto propia en base64
+    string perfil;
+    if (avatar == "foto") perfil = foto;
+    else if (!avatar.empty()) perfil = "animal:" + avatar;
+
+    enviar(s, "FOTO|" + real + "|" + perfil);
+}
+
+// Elimina un mensaje PROPIO para todos los que lo veian.
+void Servidor::cmdBorrar(const SesionPtr& s, const string& idTexto) {
+    long long id;
+    MensajeGuardado m;
+
+    if (!aNumero(idTexto, id) || !bd.mensaje(id, m)) {
+        enviar(s, "AVISO|Ese mensaje ya no existe.");
+        return;
+    }
+
+    if (minusculas(m.autor) != minusculas(s->usuario)) {
+        enviar(s, "AVISO|Solo puedes eliminar tus propios mensajes.");
+        return;
+    }
+
+    if (!bd.borrarMensaje(id)) {
+        enviar(s, "AVISO|No se pudo eliminar el mensaje.");
+        return;
+    }
+
+    const string idTxt = to_string(id);
+
+    if (m.ambito == "G") {
+        difundir("DEL|G|general|" + idTxt);
+    } else if (m.ambito == "D") {
+        // cada quien lo ve bajo el nombre del OTRO
+        enviarA(m.autor, "DEL|D|" + m.destino + "|" + idTxt);
+        enviarA(m.destino, "DEL|D|" + m.autor + "|" + idTxt);
+    } else if (m.ambito == "R") {
+        enviarAVarios(bd.miembrosGrupo(stoll(m.clave)), "DEL|R|" + m.clave + "|" + idTxt);
+    } else if (m.ambito == "C") {
+        enviarAVarios(bd.miembrosCanal(stoll(m.clave)), "DEL|C|" + m.clave + "|" + idTxt);
+    }
 }
 
 // ---------------------------------------------------------------------
@@ -770,4 +825,3 @@ bool Servidor::iniciar() {
     cout << "Servidor detenido." << endl;
     return true;
 }
-

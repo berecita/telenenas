@@ -7,6 +7,9 @@
 
 using namespace std;
 
+// Version del esquema (se guarda en PRAGMA user_version).
+static const int VERSION_ESQUEMA = 2;
+
 BaseDatos::~BaseDatos() {
     if (db != nullptr) {
         sqlite3_close(db);
@@ -22,38 +25,82 @@ bool BaseDatos::abrir(const string& ruta) {
     }
 
     sqlite3_busy_timeout(db, 5000);
+    ejec("PRAGMA foreign_keys = ON"); // SQLite no hace cumplir las llaves foraneas si no se activa
 
+    // ---- esquema viejo? (la primera version del proyecto usaba otras tablas) ----
+    auto version = cons("PRAGMA user_version");
+    int versionActual = version.empty() ? 0 : stoi(version[0][0]);
+    bool hayTablas = !cons("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").empty();
+
+    if (versionActual != VERSION_ESQUEMA && hayTablas) {
+        cerr << "El archivo '" << ruta << "' tiene un esquema de una version anterior.\n"
+             << "Borralo (rm " << ruta << ") o usa otro nombre de archivo para crear la base de datos nueva." << endl;
+        return false;
+    }
+
+    // Tipos de datos estandar. Las fechas son DATETIME en texto "AAAA-MM-DD HH:MM:SS"
+    // (hora local), asi se leen directo con un SELECT normal, sin convertir nada.
     const char* esquema =
-        "CREATE TABLE IF NOT EXISTS usuarios("
-        "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
-        "  nombre TEXT NOT NULL UNIQUE COLLATE NOCASE,"
-        "  sal TEXT NOT NULL, hash TEXT NOT NULL,"
+        "CREATE TABLE IF NOT EXISTS Usuarios ("
+        "  idUsuario INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "  nombre VARCHAR(16) NOT NULL UNIQUE COLLATE NOCASE CHECK (length(nombre) BETWEEN 1 AND 16),"
+        "  sal CHAR(32) NOT NULL,"
+        "  hashClave CHAR(64) NOT NULL,"
+        "  avatar VARCHAR(10) NOT NULL DEFAULT '' CHECK (avatar IN ('', 'foto', 'gato', 'perro', 'conejo', 'oso', 'zorro')),"
         "  foto TEXT NOT NULL DEFAULT '',"
-        "  creado INTEGER NOT NULL);"
-        "CREATE TABLE IF NOT EXISTS mensajes("
-        "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
-        "  ambito TEXT NOT NULL,"
-        "  clave TEXT NOT NULL DEFAULT '',"
-        "  autor TEXT NOT NULL,"
-        "  destino TEXT NOT NULL DEFAULT '',"
-        "  texto TEXT NOT NULL,"
-        "  fecha INTEGER NOT NULL);"
-        "CREATE INDEX IF NOT EXISTS idx_mensajes_sala ON mensajes(ambito, clave, id);"
-        "CREATE TABLE IF NOT EXISTS grupos("
-        "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
-        "  nombre TEXT NOT NULL, dueno TEXT NOT NULL);"
-        "CREATE TABLE IF NOT EXISTS grupo_miembros("
-        "  grupo_id INTEGER NOT NULL,"
-        "  usuario TEXT NOT NULL COLLATE NOCASE,"
-        "  PRIMARY KEY(grupo_id, usuario));"
-        "CREATE TABLE IF NOT EXISTS canales("
-        "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
-        "  nombre TEXT NOT NULL UNIQUE COLLATE NOCASE,"
-        "  dueno TEXT NOT NULL);"
-        "CREATE TABLE IF NOT EXISTS canal_miembros("
-        "  canal_id INTEGER NOT NULL,"
-        "  usuario TEXT NOT NULL COLLATE NOCASE,"
-        "  PRIMARY KEY(canal_id, usuario));";
+        "  fechaRegistro DATETIME NOT NULL DEFAULT (datetime('now', 'localtime')));"
+
+        "CREATE TABLE IF NOT EXISTS Grupos ("
+        "  idGrupo INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "  nombre VARCHAR(24) NOT NULL,"
+        "  idDueno INTEGER NOT NULL,"
+        "  fechaCreacion DATETIME NOT NULL DEFAULT (datetime('now', 'localtime')),"
+        "  FOREIGN KEY (idDueno) REFERENCES Usuarios(idUsuario) ON DELETE CASCADE);"
+
+        "CREATE TABLE IF NOT EXISTS GrupoMiembros ("
+        "  idGrupo INTEGER NOT NULL,"
+        "  idUsuario INTEGER NOT NULL,"
+        "  fechaUnion DATETIME NOT NULL DEFAULT (datetime('now', 'localtime')),"
+        "  PRIMARY KEY (idGrupo, idUsuario),"
+        "  FOREIGN KEY (idGrupo) REFERENCES Grupos(idGrupo) ON DELETE CASCADE,"
+        "  FOREIGN KEY (idUsuario) REFERENCES Usuarios(idUsuario) ON DELETE CASCADE);"
+
+        "CREATE TABLE IF NOT EXISTS Canales ("
+        "  idCanal INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "  nombre VARCHAR(24) NOT NULL UNIQUE COLLATE NOCASE,"
+        "  idDueno INTEGER NOT NULL,"
+        "  fechaCreacion DATETIME NOT NULL DEFAULT (datetime('now', 'localtime')),"
+        "  FOREIGN KEY (idDueno) REFERENCES Usuarios(idUsuario) ON DELETE CASCADE);"
+
+        "CREATE TABLE IF NOT EXISTS CanalMiembros ("
+        "  idCanal INTEGER NOT NULL,"
+        "  idUsuario INTEGER NOT NULL,"
+        "  fechaUnion DATETIME NOT NULL DEFAULT (datetime('now', 'localtime')),"
+        "  PRIMARY KEY (idCanal, idUsuario),"
+        "  FOREIGN KEY (idCanal) REFERENCES Canales(idCanal) ON DELETE CASCADE,"
+        "  FOREIGN KEY (idUsuario) REFERENCES Usuarios(idUsuario) ON DELETE CASCADE);"
+
+        // tipo: G = general, D = directo, R = grupo, C = canal. Cada tipo usa SOLO su llave.
+        "CREATE TABLE IF NOT EXISTS Mensajes ("
+        "  idMensaje INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "  tipo CHAR(1) NOT NULL CHECK (tipo IN ('G', 'D', 'R', 'C')),"
+        "  idAutor INTEGER NOT NULL,"
+        "  idDestino INTEGER,"
+        "  idGrupo INTEGER,"
+        "  idCanal INTEGER,"
+        "  texto VARCHAR(500) NOT NULL CHECK (length(texto) BETWEEN 1 AND 500),"
+        "  fechaEnvio DATETIME NOT NULL DEFAULT (datetime('now', 'localtime')),"
+        "  FOREIGN KEY (idAutor) REFERENCES Usuarios(idUsuario) ON DELETE CASCADE,"
+        "  FOREIGN KEY (idDestino) REFERENCES Usuarios(idUsuario) ON DELETE CASCADE,"
+        "  FOREIGN KEY (idGrupo) REFERENCES Grupos(idGrupo) ON DELETE CASCADE,"
+        "  FOREIGN KEY (idCanal) REFERENCES Canales(idCanal) ON DELETE CASCADE,"
+        "  CHECK ((tipo = 'G' AND idDestino IS NULL AND idGrupo IS NULL AND idCanal IS NULL) OR"
+        "         (tipo = 'D' AND idDestino IS NOT NULL AND idGrupo IS NULL AND idCanal IS NULL) OR"
+        "         (tipo = 'R' AND idGrupo IS NOT NULL AND idDestino IS NULL AND idCanal IS NULL) OR"
+        "         (tipo = 'C' AND idCanal IS NOT NULL AND idDestino IS NULL AND idGrupo IS NULL)));"
+
+        "CREATE INDEX IF NOT EXISTS idxMensajesSala ON Mensajes(tipo, idGrupo, idCanal, idMensaje);"
+        "CREATE INDEX IF NOT EXISTS idxMensajesDirectos ON Mensajes(idAutor, idDestino);";
 
     char* error = nullptr;
 
@@ -63,6 +110,7 @@ bool BaseDatos::abrir(const string& ruta) {
         return false;
     }
 
+    ejec("PRAGMA user_version = " + to_string(VERSION_ESQUEMA));
     return true;
 }
 
@@ -126,6 +174,16 @@ vector<BaseDatos::Fila> BaseDatos::cons(const string& sql, const vector<string>&
     return filas;
 }
 
+// Columnas: id, ambito, clave, autor, destino, texto, fecha (en ese orden).
+static const char* SELECT_MENSAJE =
+    "SELECT m.idMensaje, m.tipo, "
+    "CASE m.tipo WHEN 'G' THEN 'general' WHEN 'R' THEN CAST(m.idGrupo AS TEXT) "
+    "            WHEN 'C' THEN CAST(m.idCanal AS TEXT) ELSE '' END, "
+    "ua.nombre, COALESCE(ud.nombre, ''), m.texto, m.fechaEnvio "
+    "FROM Mensajes m "
+    "JOIN Usuarios ua ON ua.idUsuario = m.idAutor "
+    "LEFT JOIN Usuarios ud ON ud.idUsuario = m.idDestino ";
+
 static MensajeGuardado filaAMensaje(const vector<string>& f) {
     MensajeGuardado m;
     m.id = stoll(f[0]);
@@ -134,25 +192,24 @@ static MensajeGuardado filaAMensaje(const vector<string>& f) {
     m.autor = f[3];
     m.destino = f[4];
     m.texto = f[5];
-    m.fecha = stoll(f[6]);
+    m.fecha = f[6];
     return m;
 }
-
-static const char* COLUMNAS_MENSAJE = "id, ambito, clave, autor, destino, texto, fecha";
 
 // ---------------------------------------------------------------------
 // Usuarios
 // ---------------------------------------------------------------------
 
-bool BaseDatos::crearUsuario(const string& nombre, const string& sal, const string& hash, const string& foto) {
+bool BaseDatos::crearUsuario(const string& nombre, const string& sal, const string& hash,
+                             const string& avatar, const string& foto) {
     lock_guard<mutex> g(mutexBD);
-    return ejec("INSERT INTO usuarios(nombre, sal, hash, foto, creado) VALUES(?1, ?2, ?3, ?4, strftime('%s','now'))",
-                {nombre, sal, hash, foto});
+    return ejec("INSERT INTO Usuarios(nombre, sal, hashClave, avatar, foto) VALUES(?1, ?2, ?3, ?4, ?5)",
+                {nombre, sal, hash, avatar, foto});
 }
 
 bool BaseDatos::credenciales(const string& nombre, string& nombreReal, string& sal, string& hash) {
     lock_guard<mutex> g(mutexBD);
-    auto filas = cons("SELECT nombre, sal, hash FROM usuarios WHERE nombre = ?1", {nombre});
+    auto filas = cons("SELECT nombre, sal, hashClave FROM Usuarios WHERE nombre = ?1", {nombre});
 
     if (filas.empty()) {
         return false;
@@ -166,39 +223,86 @@ bool BaseDatos::credenciales(const string& nombre, string& nombreReal, string& s
 
 string BaseDatos::nombreCanonico(const string& nombre) {
     lock_guard<mutex> g(mutexBD);
-    auto filas = cons("SELECT nombre FROM usuarios WHERE nombre = ?1", {nombre});
+    auto filas = cons("SELECT nombre FROM Usuarios WHERE nombre = ?1", {nombre});
     return filas.empty() ? "" : filas[0][0];
 }
 
-string BaseDatos::foto(const string& nombre) {
+bool BaseDatos::perfil(const string& nombre, string& avatar, string& foto) {
     lock_guard<mutex> g(mutexBD);
-    auto filas = cons("SELECT foto FROM usuarios WHERE nombre = ?1", {nombre});
-    return filas.empty() ? "" : filas[0][0];
+    auto filas = cons("SELECT avatar, foto FROM Usuarios WHERE nombre = ?1", {nombre});
+
+    if (filas.empty()) {
+        return false;
+    }
+
+    avatar = filas[0][0];
+    foto = filas[0][1];
+    return true;
 }
 
 // ---------------------------------------------------------------------
 // Mensajes
 // ---------------------------------------------------------------------
 
-long long BaseDatos::guardarMensaje(const string& ambito, const string& clave, const string& autor,
-                                    const string& destino, const string& texto, long long fecha) {
+bool BaseDatos::guardarMensaje(MensajeGuardado& m) {
     lock_guard<mutex> g(mutexBD);
-    long long id = -1;
 
-    if (!ejec("INSERT INTO mensajes(ambito, clave, autor, destino, texto, fecha) VALUES(?1,?2,?3,?4,?5,?6)",
-              {ambito, clave, autor, destino, texto, to_string(fecha)}, &id)) {
-        return -1;
+    // Un mensaje usa SOLO la llave que le toca (los demas quedan en NULL; ver el CHECK de la tabla).
+    string idGrupo = (m.ambito == "R") ? m.clave : "";
+    string idCanal = (m.ambito == "C") ? m.clave : "";
+
+    long long id = 0;
+
+    if (!ejec("INSERT INTO Mensajes(tipo, idAutor, idDestino, idGrupo, idCanal, texto) VALUES("
+              "?1, (SELECT idUsuario FROM Usuarios WHERE nombre = ?2), "
+              "(SELECT idUsuario FROM Usuarios WHERE nombre = ?3), "
+              "CAST(NULLIF(?4, '') AS INTEGER), CAST(NULLIF(?5, '') AS INTEGER), ?6)",
+              {m.ambito, m.autor, m.destino, idGrupo, idCanal, m.texto}, &id)) {
+        return false;
     }
 
-    return id;
+    auto filas = cons("SELECT fechaEnvio FROM Mensajes WHERE idMensaje = ?1", {to_string(id)});
+    m.id = id;
+    m.fecha = filas.empty() ? "" : filas[0][0];
+    return true;
+}
+
+bool BaseDatos::mensaje(long long id, MensajeGuardado& salida) {
+    lock_guard<mutex> g(mutexBD);
+    auto filas = cons(string(SELECT_MENSAJE) + "WHERE m.idMensaje = ?1", {to_string(id)});
+
+    if (filas.empty()) {
+        return false;
+    }
+
+    salida = filaAMensaje(filas[0]);
+    return true;
+}
+
+bool BaseDatos::borrarMensaje(long long id) {
+    lock_guard<mutex> g(mutexBD);
+    return ejec("DELETE FROM Mensajes WHERE idMensaje = ?1", {to_string(id)});
 }
 
 vector<MensajeGuardado> BaseDatos::historial(const string& ambito, const string& clave, int limite) {
     lock_guard<mutex> g(mutexBD);
-    auto filas = cons(string("SELECT ") + COLUMNAS_MENSAJE +
-                      " FROM mensajes WHERE ambito = ?1 AND clave = ?2 ORDER BY id DESC LIMIT " +
-                      to_string(limite),
-                      {ambito, clave});
+
+    string donde;
+    vector<string> params;
+
+    if (ambito == "G") {
+        donde = "WHERE m.tipo = 'G' ";
+    } else if (ambito == "R") {
+        donde = "WHERE m.tipo = 'R' AND m.idGrupo = CAST(?1 AS INTEGER) ";
+        params = {clave};
+    } else if (ambito == "C") {
+        donde = "WHERE m.tipo = 'C' AND m.idCanal = CAST(?1 AS INTEGER) ";
+        params = {clave};
+    } else {
+        return {};
+    }
+
+    auto filas = cons(string(SELECT_MENSAJE) + donde + "ORDER BY m.idMensaje DESC LIMIT " + to_string(limite), params);
 
     vector<MensajeGuardado> mensajes;
     for (const auto& f : filas) mensajes.push_back(filaAMensaje(f));
@@ -208,10 +312,10 @@ vector<MensajeGuardado> BaseDatos::historial(const string& ambito, const string&
 
 vector<MensajeGuardado> BaseDatos::historialDirecto(const string& a, const string& b, int limite) {
     lock_guard<mutex> g(mutexBD);
-    auto filas = cons(string("SELECT ") + COLUMNAS_MENSAJE +
-                      " FROM mensajes WHERE ambito = 'D' AND "
-                      "((autor = ?1 AND destino = ?2) OR (autor = ?2 AND destino = ?1)) "
-                      "ORDER BY id DESC LIMIT " + to_string(limite),
+    auto filas = cons(string(SELECT_MENSAJE) +
+                      "WHERE m.tipo = 'D' AND ((ua.nombre = ?1 AND ud.nombre = ?2) OR "
+                      "(ua.nombre = ?2 AND ud.nombre = ?1)) "
+                      "ORDER BY m.idMensaje DESC LIMIT " + to_string(limite),
                       {a, b});
 
     vector<MensajeGuardado> mensajes;
@@ -222,8 +326,11 @@ vector<MensajeGuardado> BaseDatos::historialDirecto(const string& a, const strin
 
 vector<string> BaseDatos::companerosDirectos(const string& usuario) {
     lock_guard<mutex> g(mutexBD);
-    auto filas = cons("SELECT DISTINCT CASE WHEN autor = ?1 THEN destino ELSE autor END "
-                      "FROM mensajes WHERE ambito = 'D' AND (autor = ?1 OR destino = ?1)",
+    auto filas = cons("SELECT DISTINCT CASE WHEN ua.nombre = ?1 THEN ud.nombre ELSE ua.nombre END "
+                      "FROM Mensajes m "
+                      "JOIN Usuarios ua ON ua.idUsuario = m.idAutor "
+                      "JOIN Usuarios ud ON ud.idUsuario = m.idDestino "
+                      "WHERE m.tipo = 'D' AND (ua.nombre = ?1 OR ud.nombre = ?1)",
                       {usuario});
 
     vector<string> nombres;
@@ -235,6 +342,14 @@ vector<string> BaseDatos::companerosDirectos(const string& usuario) {
 // Grupos
 // ---------------------------------------------------------------------
 
+vector<string> BaseDatos::miembrosDe(const string& sql, long long id) {
+    auto filas = cons(sql, {to_string(id)});
+
+    vector<string> nombres;
+    for (const auto& f : filas) nombres.push_back(f[0]);
+    return nombres;
+}
+
 long long BaseDatos::crearGrupo(const string& nombre, const string& dueno, const vector<string>& miembros) {
     lock_guard<mutex> g(mutexBD);
 
@@ -243,10 +358,12 @@ long long BaseDatos::crearGrupo(const string& nombre, const string& dueno, const
     }
 
     long long id = -1;
-    bool ok = ejec("INSERT INTO grupos(nombre, dueno) VALUES(?1, ?2)", {nombre, dueno}, &id);
+    bool ok = ejec("INSERT INTO Grupos(nombre, idDueno) VALUES(?1, (SELECT idUsuario FROM Usuarios WHERE nombre = ?2))",
+                   {nombre, dueno}, &id);
 
     for (size_t i = 0; ok && i < miembros.size(); i++) {
-        ok = ejec("INSERT OR IGNORE INTO grupo_miembros(grupo_id, usuario) VALUES(?1, ?2)",
+        ok = ejec("INSERT OR IGNORE INTO GrupoMiembros(idGrupo, idUsuario) "
+                  "VALUES(?1, (SELECT idUsuario FROM Usuarios WHERE nombre = ?2))",
                   {to_string(id), miembros[i]});
     }
 
@@ -261,7 +378,8 @@ long long BaseDatos::crearGrupo(const string& nombre, const string& dueno, const
 
 bool BaseDatos::grupo(long long id, SalaGuardada& salida) {
     lock_guard<mutex> g(mutexBD);
-    auto filas = cons("SELECT id, nombre, dueno FROM grupos WHERE id = ?1", {to_string(id)});
+    auto filas = cons("SELECT g.idGrupo, g.nombre, u.nombre FROM Grupos g "
+                      "JOIN Usuarios u ON u.idUsuario = g.idDueno WHERE g.idGrupo = ?1", {to_string(id)});
 
     if (filas.empty()) return false;
 
@@ -273,8 +391,11 @@ bool BaseDatos::grupo(long long id, SalaGuardada& salida) {
 
 vector<SalaGuardada> BaseDatos::gruposDe(const string& usuario) {
     lock_guard<mutex> g(mutexBD);
-    auto filas = cons("SELECT g.id, g.nombre, g.dueno FROM grupos g "
-                      "JOIN grupo_miembros m ON m.grupo_id = g.id WHERE m.usuario = ?1 ORDER BY g.id",
+    auto filas = cons("SELECT g.idGrupo, g.nombre, d.nombre FROM Grupos g "
+                      "JOIN Usuarios d ON d.idUsuario = g.idDueno "
+                      "JOIN GrupoMiembros gm ON gm.idGrupo = g.idGrupo "
+                      "JOIN Usuarios u ON u.idUsuario = gm.idUsuario "
+                      "WHERE u.nombre = ?1 ORDER BY g.idGrupo",
                       {usuario});
 
     vector<SalaGuardada> grupos;
@@ -290,25 +411,16 @@ vector<SalaGuardada> BaseDatos::gruposDe(const string& usuario) {
     return grupos;
 }
 
-vector<string> BaseDatos::miembrosDe(const string& tabla, const string& columna, long long id) {
-    // `tabla` y `columna` son constantes internas (nunca vienen del usuario).
-    auto filas = cons("SELECT usuario FROM " + tabla + " WHERE " + columna + " = ?1 ORDER BY rowid",
-                      {to_string(id)});
-
-    vector<string> nombres;
-    for (const auto& f : filas) nombres.push_back(f[0]);
-    return nombres;
-}
-
 vector<string> BaseDatos::miembrosGrupo(long long id) {
     lock_guard<mutex> g(mutexBD);
-    return miembrosDe("grupo_miembros", "grupo_id", id);
+    return miembrosDe("SELECT u.nombre FROM GrupoMiembros gm JOIN Usuarios u ON u.idUsuario = gm.idUsuario "
+                      "WHERE gm.idGrupo = ?1 ORDER BY gm.rowid", id);
 }
 
 bool BaseDatos::esMiembroGrupo(long long id, const string& usuario) {
     lock_guard<mutex> g(mutexBD);
-    return !cons("SELECT 1 FROM grupo_miembros WHERE grupo_id = ?1 AND usuario = ?2",
-                 {to_string(id), usuario}).empty();
+    return !cons("SELECT 1 FROM GrupoMiembros gm JOIN Usuarios u ON u.idUsuario = gm.idUsuario "
+                 "WHERE gm.idGrupo = ?1 AND u.nombre = ?2", {to_string(id), usuario}).empty();
 }
 
 // ---------------------------------------------------------------------
@@ -325,8 +437,10 @@ long long BaseDatos::crearCanal(const string& nombre, const string& dueno) {
     long long id = -1;
 
     // Si el nombre ya existe, UNIQUE hace fallar el INSERT.
-    bool ok = ejec("INSERT INTO canales(nombre, dueno) VALUES(?1, ?2)", {nombre, dueno}, &id) &&
-              ejec("INSERT INTO canal_miembros(canal_id, usuario) VALUES(?1, ?2)", {to_string(id), dueno});
+    bool ok = ejec("INSERT INTO Canales(nombre, idDueno) VALUES(?1, (SELECT idUsuario FROM Usuarios WHERE nombre = ?2))",
+                   {nombre, dueno}, &id) &&
+              ejec("INSERT INTO CanalMiembros(idCanal, idUsuario) VALUES(?1, (SELECT idUsuario FROM Usuarios WHERE nombre = ?2))",
+                   {to_string(id), dueno});
 
     if (!ok) {
         ejec("ROLLBACK");
@@ -339,7 +453,8 @@ long long BaseDatos::crearCanal(const string& nombre, const string& dueno) {
 
 bool BaseDatos::canal(long long id, SalaGuardada& salida) {
     lock_guard<mutex> g(mutexBD);
-    auto filas = cons("SELECT id, nombre, dueno FROM canales WHERE id = ?1", {to_string(id)});
+    auto filas = cons("SELECT c.idCanal, c.nombre, u.nombre FROM Canales c "
+                      "JOIN Usuarios u ON u.idUsuario = c.idDueno WHERE c.idCanal = ?1", {to_string(id)});
 
     if (filas.empty()) return false;
 
@@ -351,7 +466,8 @@ bool BaseDatos::canal(long long id, SalaGuardada& salida) {
 
 vector<SalaGuardada> BaseDatos::todosLosCanales() {
     lock_guard<mutex> g(mutexBD);
-    auto filas = cons("SELECT id, nombre, dueno FROM canales ORDER BY id");
+    auto filas = cons("SELECT c.idCanal, c.nombre, u.nombre FROM Canales c "
+                      "JOIN Usuarios u ON u.idUsuario = c.idDueno ORDER BY c.idCanal");
 
     vector<SalaGuardada> canales;
 
@@ -368,18 +484,19 @@ vector<SalaGuardada> BaseDatos::todosLosCanales() {
 
 bool BaseDatos::unirCanal(long long id, const string& usuario) {
     lock_guard<mutex> g(mutexBD);
-    return ejec("INSERT OR IGNORE INTO canal_miembros(canal_id, usuario) VALUES(?1, ?2)",
+    return ejec("INSERT OR IGNORE INTO CanalMiembros(idCanal, idUsuario) "
+                "VALUES(?1, (SELECT idUsuario FROM Usuarios WHERE nombre = ?2))",
                 {to_string(id), usuario});
 }
 
 vector<string> BaseDatos::miembrosCanal(long long id) {
     lock_guard<mutex> g(mutexBD);
-    return miembrosDe("canal_miembros", "canal_id", id);
+    return miembrosDe("SELECT u.nombre FROM CanalMiembros cm JOIN Usuarios u ON u.idUsuario = cm.idUsuario "
+                      "WHERE cm.idCanal = ?1 ORDER BY cm.rowid", id);
 }
 
 bool BaseDatos::esMiembroCanal(long long id, const string& usuario) {
     lock_guard<mutex> g(mutexBD);
-    return !cons("SELECT 1 FROM canal_miembros WHERE canal_id = ?1 AND usuario = ?2",
-                 {to_string(id), usuario}).empty();
+    return !cons("SELECT 1 FROM CanalMiembros cm JOIN Usuarios u ON u.idUsuario = cm.idUsuario "
+                 "WHERE cm.idCanal = ?1 AND u.nombre = ?2", {to_string(id), usuario}).empty();
 }
-

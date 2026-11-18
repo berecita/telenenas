@@ -24,7 +24,7 @@ struct MensajeGuardado {
     std::string autor;
     std::string destino;  // solo en directos
     std::string texto;
-    long long fecha = 0;  // segundos desde 1970
+    std::string fecha;    // "AAAA-MM-DD HH:MM:SS" (hora local del servidor)
 };
 
 struct SalaGuardada {      // un grupo o un canal
@@ -45,7 +45,7 @@ private:
               long long* ultimoId = nullptr);
     std::vector<Fila> cons(const std::string& sql, const std::vector<std::string>& params = {});
 
-    std::vector<std::string> miembrosDe(const std::string& tabla, const std::string& columna, long long id);
+    std::vector<std::string> miembrosDe(const std::string& sql, long long id);
 
 public:
     ~BaseDatos();
@@ -53,18 +53,20 @@ public:
     bool abrir(const std::string& ruta);
 
     // ---- usuarios ----
-    bool crearUsuario(const std::string& nombre, const std::string& sal,
-                      const std::string& hash, const std::string& foto);
+    // avatar: "" (ninguno), "foto" (foto propia, en `foto` en base64) o el nombre de un animal.
+    bool crearUsuario(const std::string& nombre, const std::string& sal, const std::string& hash,
+                      const std::string& avatar, const std::string& foto);
     // Regresa false si no existe. `nombreReal` trae las mayusculas con que se registro.
     bool credenciales(const std::string& nombre, std::string& nombreReal,
                       std::string& sal, std::string& hash);
     std::string nombreCanonico(const std::string& nombre); // "" si no existe
-    std::string foto(const std::string& nombre);
+    bool perfil(const std::string& nombre, std::string& avatar, std::string& foto);
 
     // ---- mensajes ----
-    long long guardarMensaje(const std::string& ambito, const std::string& clave,
-                             const std::string& autor, const std::string& destino,
-                             const std::string& texto, long long fecha);
+    // Guarda el mensaje y rellena m.id y m.fecha (la fecha la pone la base de datos).
+    bool guardarMensaje(MensajeGuardado& m);
+    bool mensaje(long long id, MensajeGuardado& salida);
+    bool borrarMensaje(long long id);
     std::vector<MensajeGuardado> historial(const std::string& ambito, const std::string& clave, int limite);
     std::vector<MensajeGuardado> historialDirecto(const std::string& a, const std::string& b, int limite);
     std::vector<std::string> companerosDirectos(const std::string& usuario);
@@ -87,4 +89,3 @@ public:
 };
 
 #endif
-

@@ -47,4 +47,3 @@ int main(int argc, char* argv[]) {
     Servidor servidor(puerto, archivoBD);
     return servidor.iniciar() ? 0 : 1;
 }
-
