@@ -7,6 +7,27 @@ Sistema de mensajería instantánea hecho con **sockets TCP** en C++17.
 
 No usa páginas web ni websockets: es TCP puro con un protocolo de texto propio (ver [Protocolo](#protocolo)).
 
+## Ejecutar el cliente después de clonar
+
+```sh
+git clone https://github.com/berecita/telenenas.git
+cd telenenas
+```
+
+Desde la raíz del repositorio, usa el lanzador de tu sistema:
+
+| Sistema | Comando |
+|---|---|
+| Windows (PowerShell) | `.\dist\windows\Abrir-Telenenas.cmd` |
+| Linux x64 | `./dist/telenenas-linux-x64/Abrir-Telenenas` |
+| macOS con Apple Silicon | `./dist/telenenas-macos-arm64/Abrir-Telenenas` |
+| macOS con Intel | `./dist/telenenas-macos-x64/Abrir-Telenenas` |
+
+Ejecuta el cliente desde un equipo con escritorio gráfico. El servidor del
+equipo debe estar escuchando en `3.149.102.2:3041`. En Linux se requieren
+las bibliotecas gráficas del sistema. Los paquetes de macOS se compilaron
+para macOS 12 o posterior.
+
 ## Funciones
 
 | Sección | Qué hace |
@@ -127,7 +148,7 @@ python3 pruebas/prueba_servidor.py ./servidor        # (o ./build/servidor)
 
 MIT (ver `LICENSE`). La fuente DejaVu Sans conserva su propia licencia (`recursos/LICENSE-DejaVu.txt`).
 
-## Ejecutables para Linux y macOS
+## Regenerar ejecutables para Linux y macOS
 
 En GitHub, abre **Actions → Clientes Linux y macOS → Run workflow**. Al
 terminar, descarga el paquete correspondiente desde **Artifacts**.
@@ -154,6 +175,6 @@ Los paquetes de macOS incluyen FreeType enlazado estáticamente y llevan firma
 ad hoc para la prueba. Si macOS bloquea el binario descargado, un paquete para
 distribución pública sin ese aviso requiere firma con Developer ID y notarización.
 
-Para que los ejecutables estén disponibles directamente después de clonar,
-extrae los paquetes verificados en `dist/` y sube esas carpetas al repositorio.
+Para actualizar los ejecutables incluidos en el repositorio, extrae los paquetes
+verificados en `dist/` y sube esas carpetas al repositorio.
 Cada carpeta debe conservar el ejecutable, el lanzador y los recursos juntos.
