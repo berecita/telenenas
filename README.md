@@ -1,4 +1,4 @@
-# Chat con sockets (C++) e interfaz SFML
+# Chat con sockets (C++) 
 
 Sistema de mensajería instantánea hecho con **sockets TCP** en C++17.
 
