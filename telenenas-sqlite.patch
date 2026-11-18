@@ -1,0 +1,111 @@
+diff --git a/README.md b/README.md
+index 957a851..392c516 100644
+--- a/README.md
++++ b/README.md
+@@ -1 +1,25 @@
+-# telenenas
+\ No newline at end of file
++# telenenas
++## Consultar la base de datos del chat
++
++Al iniciar el servidor compilado con estos cambios, SQLite agrega vistas e índices
++a la base indicada al ejecutar el servidor. Los registros y tablas existentes se
++conservan. Para revisar las pruebas, abre por SSH el archivo que usa el servidor
++activo, por ejemplo `~/telenenas/chat.db`:
++
++```bash
++sqlite3 -readonly chat.db
++```
++
++```sql
++.headers on
++.mode column
++SELECT * FROM usuarios_legibles ORDER BY id DESC LIMIT 10;
++SELECT * FROM mensajes_legibles ORDER BY id DESC LIMIT 20;
++.quit
++```
++
++Las vistas muestran las fechas en UTC, identifican el tipo de mensaje y muestran
++el nombre de la sala cuando corresponde. Los timestamps se siguen almacenando
++como segundos Unix y la vista de usuarios solo expone el identificador, el nombre
++y la fecha de registro. Los índices de mensajes directos y de membresía de grupos
++se crean automáticamente para las consultas del servidor.
+diff --git a/src/servidor/BaseDatos.cpp b/src/servidor/BaseDatos.cpp
+index f2cbf3f..135b0a9 100644
+--- a/src/servidor/BaseDatos.cpp
++++ b/src/servidor/BaseDatos.cpp
+@@ -24,6 +24,7 @@ bool BaseDatos::abrir(const string& ruta) {
+     sqlite3_busy_timeout(db, 5000);
+ 
+     const char* esquema =
++        "BEGIN IMMEDIATE;"
+         "CREATE TABLE IF NOT EXISTS usuarios("
+         "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
+         "  nombre TEXT NOT NULL UNIQUE COLLATE NOCASE,"
+@@ -53,13 +54,35 @@ bool BaseDatos::abrir(const string& ruta) {
+         "CREATE TABLE IF NOT EXISTS canal_miembros("
+         "  canal_id INTEGER NOT NULL,"
+         "  usuario TEXT NOT NULL COLLATE NOCASE,"
+-        "  PRIMARY KEY(canal_id, usuario));";
++        "  PRIMARY KEY(canal_id, usuario));"
++        "CREATE INDEX IF NOT EXISTS idx_grupo_miembros_usuario ON grupo_miembros(usuario, grupo_id);"
++        "CREATE INDEX IF NOT EXISTS idx_directos_autor_destino"
++        "  ON mensajes(autor, destino, id) WHERE ambito = 'D';"
++        "CREATE INDEX IF NOT EXISTS idx_directos_destino_autor"
++        "  ON mensajes(destino, autor) WHERE ambito = 'D';"
++        "CREATE VIEW IF NOT EXISTS usuarios_legibles AS"
++        "  SELECT id, nombre, datetime(creado, 'unixepoch') AS registro_utc FROM usuarios;"
++        "CREATE VIEW IF NOT EXISTS mensajes_legibles AS"
++        "  SELECT m.id, CASE m.ambito"
++        "    WHEN 'G' THEN 'General' WHEN 'D' THEN 'Directo'"
++        "    WHEN 'R' THEN 'Grupo' WHEN 'C' THEN 'Canal' ELSE m.ambito END AS tipo,"
++        "  CASE m.ambito WHEN 'G' THEN 'General' WHEN 'R' THEN g.nombre"
++        "    WHEN 'C' THEN c.nombre END AS sala,"
++        "  m.autor, NULLIF(m.destino, '') AS destino, m.texto,"
++        "  datetime(m.fecha, 'unixepoch') AS fecha_utc"
++        "  FROM mensajes AS m"
++        "  LEFT JOIN grupos AS g ON m.ambito = 'R' AND g.id = m.clave"
++        "  LEFT JOIN canales AS c ON m.ambito = 'C' AND c.id = m.clave;"
++        "COMMIT;";
+ 
+     char* error = nullptr;
+ 
+     if (sqlite3_exec(db, esquema, nullptr, nullptr, &error) != SQLITE_OK) {
+         cerr << "Error creando las tablas: " << (error ? error : "?") << endl;
+         sqlite3_free(error);
++        if (!sqlite3_get_autocommit(db)) {
++            sqlite3_exec(db, "ROLLBACK", nullptr, nullptr, nullptr);
++        }
+         return false;
+     }
+ 
+@@ -208,11 +231,13 @@ vector<MensajeGuardado> BaseDatos::historial(const string& ambito, const string&
+ 
+ vector<MensajeGuardado> BaseDatos::historialDirecto(const string& a, const string& b, int limite) {
+     lock_guard<mutex> g(mutexBD);
+-    auto filas = cons(string("SELECT ") + COLUMNAS_MENSAJE +
+-                      " FROM mensajes WHERE ambito = 'D' AND "
+-                      "((autor = ?1 AND destino = ?2) OR (autor = ?2 AND destino = ?1)) "
+-                      "ORDER BY id DESC LIMIT " + to_string(limite),
+-                      {a, b});
++    const string columnas = COLUMNAS_MENSAJE;
++    auto filas = cons("SELECT " + columnas +
++                      " FROM mensajes WHERE ambito = 'D' AND autor = ?1 AND destino = ?2"
++                      " UNION ALL SELECT " + columnas +
++                      " FROM mensajes WHERE ambito = 'D' AND autor = ?2 AND destino = ?1 AND ?1 <> ?2"
++                      " ORDER BY id DESC LIMIT ?3",
++                      {a, b, to_string(limite)});
+ 
+     vector<MensajeGuardado> mensajes;
+     for (const auto& f : filas) mensajes.push_back(filaAMensaje(f));
+@@ -222,8 +247,8 @@ vector<MensajeGuardado> BaseDatos::historialDirecto(const string& a, const strin
+ 
+ vector<string> BaseDatos::companerosDirectos(const string& usuario) {
+     lock_guard<mutex> g(mutexBD);
+-    auto filas = cons("SELECT DISTINCT CASE WHEN autor = ?1 THEN destino ELSE autor END "
+-                      "FROM mensajes WHERE ambito = 'D' AND (autor = ?1 OR destino = ?1)",
++    auto filas = cons("SELECT destino FROM mensajes WHERE ambito = 'D' AND autor = ?1"
++                      " UNION SELECT autor FROM mensajes WHERE ambito = 'D' AND destino = ?1",
+                       {usuario});
+ 
+     vector<string> nombres;
