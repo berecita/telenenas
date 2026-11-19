@@ -27,17 +27,8 @@ if(BUILD_SERVIDOR)
 		src/comun/Base64.cpp)
 	target_link_libraries(servidor PRIVATE Threads::Threads)
 
-	# SQLite: la del sistema (libsqlite3-dev) o, si no hay permisos para instalarla,
-	# el "amalgamation" descargado en third_party/sqlite3/ (ver README).
-	if(EXISTS "${CMAKE_SOURCE_DIR}/third_party/sqlite3/sqlite3.c")
-		add_library(sqlite3_local STATIC third_party/sqlite3/sqlite3.c)
-		target_include_directories(sqlite3_local PUBLIC third_party/sqlite3)
-		target_link_libraries(sqlite3_local PUBLIC ${CMAKE_DL_LIBS} Threads::Threads)
-		target_link_libraries(servidor PRIVATE sqlite3_local)
-	else()
-		find_package(SQLite3 REQUIRED)
-		target_link_libraries(servidor PRIVATE SQLite::SQLite3)
-	endif()
+	find_package(ODBC REQUIRED)
+	target_link_libraries(servidor PRIVATE ODBC::ODBC)
 endif()
 
 # ======================= CLIENTE (SFML) =======================

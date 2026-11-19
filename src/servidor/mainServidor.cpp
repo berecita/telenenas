@@ -1,8 +1,8 @@
 // =====================================================================
 //  CHAT - Servidor (solo consola, sin interfaz grafica)
 //
-//  Uso:   ./servidor [puerto] [archivo_base_de_datos]
-//         ./servidor 5123 chat.db
+//  Uso:   ./servidor [puerto] [nombre_base_SQL]
+//         ./servidor 3041 Telenenas
 //  Parar: Ctrl+C
 // =====================================================================
 
@@ -22,19 +22,19 @@ extern "C" void manejarSenal(int) {
 
 int main(int argc, char* argv[]) {
     int puerto = PUERTO_POR_DEFECTO;
-    string archivoBD = "chat.db";
+    string nombreBD = "Telenenas";
 
     if (argc > 1) {
         puerto = atoi(argv[1]);
 
         if (puerto <= 0 || puerto > 65535) {
-            cout << "Uso: " << argv[0] << " [puerto] [archivo_base_de_datos]" << endl;
+            cout << "Uso: " << argv[0] << " [puerto] [nombre_base_SQL]" << endl;
             return 1;
         }
     }
 
     if (argc > 2) {
-        archivoBD = argv[2];
+        nombreBD = argv[2];
     }
 
     struct sigaction accion;
@@ -44,6 +44,6 @@ int main(int argc, char* argv[]) {
     sigaction(SIGINT, &accion, nullptr);
     sigaction(SIGTERM, &accion, nullptr);
 
-    Servidor servidor(puerto, archivoBD);
+    Servidor servidor(puerto, nombreBD);
     return servidor.iniciar() ? 0 : 1;
 }
