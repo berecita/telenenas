@@ -6,16 +6,8 @@
 #include <vector>
 
 // ---------------------------------------------------------------------
-// Capa de acceso a la base de datos (SQLite).
-//
-// TODO el SQL vive en BaseDatos.cpp; el resto del servidor solo usa estos
-// metodos. Si el profe exige otro motor (MySQL, PostgreSQL...), basta con
-// reescribir BaseDatos.cpp manteniendo esta misma interfaz.
-//
-// Es seguro llamarla desde varios hilos: cada metodo toma el mutex interno.
-// ---------------------------------------------------------------------
-
-struct sqlite3; // declaracion adelantada: asi este .h no necesita <sqlite3.h>
+// Acceso a SQL Server con una conexion ODBC protegida por mutex.
+#include <sql.h>
 
 struct MensajeGuardado {
     long long id = 0;
@@ -42,7 +34,9 @@ struct SalaGuardada {      // un grupo o un canal
 
 class BaseDatos {
 private:
-    sqlite3* db = nullptr;
+    SQLHENV entorno = SQL_NULL_HENV;
+    SQLHDBC db = SQL_NULL_HDBC;
+    SQLLEN afectados = 0;
     std::mutex mutexBD;
 
     using Fila = std::vector<std::string>;
