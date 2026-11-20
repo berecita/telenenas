@@ -66,7 +66,7 @@ Elige el bloque correspondiente. Los comandos entran en la carpeta del paquete p
 .\dist\windows\cliente.exe 3.149.102.2 3041
 ```
 
-Desde el Explorador también se puede abrir `dist\windows\Abrir-Telenenas.cmd` con doble clic.
+Desde el Explorador de archivos también se puede abrir `dist\windows\Abrir-Telenenas.cmd` con doble clic.
 
 **GNU/Linux · Intel o AMD de 64 bits**
 
