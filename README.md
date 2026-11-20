@@ -26,8 +26,7 @@ Desde Windows, Linux o macOS se puede administrar el servidor por SSH. El comand
 **Desde la computadora del responsable**, abre una terminal y entra con la llave y la cuenta Linux asignadas. Sustituye los dos valores de ejemplo:
 
 ```bash
-ssh -i "RUTA_A_LA_LLAVE.pem" USUARIO_LINUX@3.149.102.2
-```
+ssh ludwikamdl@3.149.102.2 -i "SisDist.pem" 
 
 **Dentro de SSH**, clona el repositorio si es la primera vez:
 
@@ -37,12 +36,6 @@ cd telenenas
 ```
 
 Si ya existe el clon, entra con `cd ~/telenenas`. Para actualizar una copia en la rama `main`, usa `git pull --ff-only origin main`.
-
-El equipo Linux necesita GNU Make, g++, los encabezados de unixODBC (`unixodbc-dev` en Debian/Ubuntu), ODBC Driver 18 y el servicio de SQL Server. En la instalación de clase ya existen la base `Telenenas`, la cuenta SQL `telenenas` y sus ocho tablas. Para preparar las tablas en otra instalación de esa base, el responsable puede ejecutar desde la raíz del clon:
-
-```bash
-/opt/mssql-tools18/bin/sqlcmd -S localhost -U administrator -d Telenenas -C -b -i sql/esquema.sql
-```
 
 Compila el servidor y captura la contraseña de la **cuenta SQL del equipo**. Ejecuta las líneas una a una. Después de `read`, escribe la contraseña y pulsa Enter.
 
@@ -69,8 +62,7 @@ Elige el bloque correspondiente. Los comandos entran en la carpeta del paquete p
 **Windows · CMD**
 
 ```bat
-cd dist\windows
-cliente.exe 3.149.102.2 3041
+.\dist\windows\cliente.exe 3.149.102.2 3041
 ```
 
 Desde el Explorador también se puede abrir `dist\windows\Abrir-Telenenas.cmd` con doble clic.
@@ -78,44 +70,22 @@ Desde el Explorador también se puede abrir `dist\windows\Abrir-Telenenas.cmd` c
 **GNU/Linux · Intel o AMD de 64 bits**
 
 ```bash
-cd dist/telenenas-linux-x64
-./cliente 3.149.102.2 3041
+./dist/telenenas-linux-x64/cliente 3.149.102.2 3041
 ```
 
 **macOS · Apple Silicon**
 
 ```bash
-cd dist/telenenas-macos-arm64
-./cliente 3.149.102.2 3041
+./dist/telenenas-macos-arm64/cliente 3.149.102.2 3041
 ```
-
 **macOS · Intel**
 
 ```bash
-cd dist/telenenas-macos-x64
-./cliente 3.149.102.2 3041
+./dist/telenenas-macos-x64/cliente 3.149.102.2 3041
 ```
 
 En «Acerca de esta Mac» puedes identificar el chip. Los dos binarios macOS declaran macOS 12.0 como versión mínima. En Linux y macOS también puedes ejecutar `./Abrir-Telenenas` dentro de la carpeta seleccionada. El lanzador ya incluye la IP y el puerto.
 
-### Compilación opcional del cliente
-
-Los paquetes de `dist/` permiten comenzar la prueba directamente. Para compilar desde el código fuente se necesita Git, un compilador C++17, CMake 3.16 o posterior y SFML 2.5/2.6. Si no encuentra SFML 2.x, CMake intenta descargar SFML 2.6.1 y necesita acceso a Internet y las dependencias gráficas del sistema.
-
-- **Windows:** con Visual Studio y la carga de trabajo de C++ de escritorio, abre CMD en la raíz del repositorio y ejecuta `compilar_windows.cmd`. Con el generador de Visual Studio, el resultado habitual es `build-windows\Release\cliente.exe`.
-- **GNU/Linux:** instala el compilador, CMake y los paquetes de desarrollo de SFML 2.x de tu distribución. Para compilar SFML desde sus fuentes, el flujo del proyecto detalla las dependencias.
-- **macOS:** usa las herramientas de línea de comandos de Xcode y CMake. Selecciona un entorno de compilación compatible con la arquitectura del equipo.
-
-Para Linux o macOS, desde la raíz:
-
-```bash
-cmake -S . -B build-cliente -DBUILD_SERVIDOR=OFF
-cmake --build build-cliente --config Release
-cd build-cliente
-./cliente 3.149.102.2 3041
-```
-
-Con un generador multiconfiguración, busca el ejecutable en la subcarpeta `Release`. Las opciones de compilación y empaquetado utilizadas por el proyecto están en [CMakeLists.txt](CMakeLists.txt) y en [el flujo de clientes de escritorio](.github/workflows/clientes-escritorio.yml).
 
 ## 3. Probar el intercambio entre sistemas
 
@@ -139,17 +109,10 @@ Abre **otra sesión SSH** y entra a la base del equipo. Escribe la contraseña c
 ```
 
 Al ver `1>`, pega esta consulta y termina con `GO` en su propia línea:
-
-```sql
-SELECT TOP (10) u.nombre AS autor, m.texto, m.fechaEnvio
-FROM dbo.Mensajes AS m
-JOIN dbo.Usuarios AS u ON u.idUsuario = m.idAutor
-WHERE m.tipo = 'G'
-ORDER BY m.idMensaje DESC;
-GO
+```bash
+1> SELECT name FROM sys.tables ORDER BY name;
+2> GO 
 ```
-
-Busca el texto que enviaste y su autor. Ver el mismo mensaje en el cliente receptor y en la consulta verifica el recorrido completo. Escribe `EXIT` para volver a la terminal.
 
 ## Si algo falla
 
