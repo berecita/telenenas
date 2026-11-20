@@ -29,7 +29,7 @@ Desde Windows, Linux o macOS se puede administrar el servidor por SSH. El comand
 ssh ludwikamdl@3.149.102.2 -i "SisDist.pem" 
 ```
 
-**Dentro de SSH**, clona el repositorio si es la primera vez:
+**Dentro de SSH**, clona el repositorio en la terminal si es la primera vez fuera del servidor (computadora propia):
 
 ```bash
 git clone https://github.com/berecita/telenenas.git
