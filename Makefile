@@ -1,7 +1,5 @@
 # Alternativa a CMake SOLO PARA EL SERVIDOR (ocupa g++, make y unixodbc-dev).
 # El cliente se compila con CMake (ver README).
-#   make          -> ./servidor
-#   make clean
 
 CXX      ?= g++
 CXXFLAGS ?= -std=c++17 -O2 -Wall -Wextra
