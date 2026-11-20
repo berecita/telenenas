@@ -160,7 +160,3 @@ Busca el texto que enviaste y su autor. Ver el mismo mensaje en el cliente recep
 | macOS no llega a mostrar la ventana | Comprueba el chip, la versión de macOS y la carpeta elegida. Ejecuta desde Terminal para ver el error exacto de arranque. |
 | Faltan avatares o fuentes | Conserva la carpeta `recursos` junto al ejecutable e inicia el cliente desde la carpeta del paquete. |
 | El servidor falla antes de escuchar | Revisa el controlador ODBC 18, la contraseña de la cuenta SQL y el acceso a las ocho tablas. Si el error menciona `bind`, comprueba si ya está corriendo otra instancia del chat en el puerto 3041. |
-
-## Licencia
-
-[Licencia MIT del proyecto](dist/telenenas-linux-x64/LICENSE-Telenenas.txt). Los paquetes incluyen también los avisos de licencia de sus recursos y dependencias.
