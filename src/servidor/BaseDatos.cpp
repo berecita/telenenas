@@ -33,7 +33,7 @@ public:
     }
     bool ejecutar(const string& sql, const vector<string>& params) {
         if (!st) return false;
-        // ?1, ?2... se pueden repetir en un predicado. ODBC enlaza por aparicion.
+        // ?1, ?2... se pueden repetir en un predicado. ODBC los enlaza por orden de aparicion.
         string comando;
         SQLUSMALLINT pos = 0;
         for (size_t i = 0; i < sql.size(); ++i) {
@@ -151,7 +151,7 @@ static const char* SELECT_MENSAJE =
     "JOIN dbo.Usuarios ua ON ua.idUsuario = m.idAutor "
     "LEFT JOIN dbo.Usuarios ud ON ud.idUsuario = m.idDestino ";
 
-// Recupera constancias de mensajes borrados sin recuperar su contenido.
+// Saca las constancias de mensajes borrados sin sacar su contenido.
 static const char* SELECT_ELIMINADO =
     "SELECT m.idMensaje, m.tipo, "
     "CASE m.tipo WHEN 'G' THEN 'general' WHEN 'R' THEN CAST(m.idGrupo AS VARCHAR(20)) "
@@ -189,7 +189,7 @@ static MensajeGuardado filaAMensaje(const vector<string>& f) {
 bool BaseDatos::crearUsuario(const string& nombre, const string& clave,
                              const string& avatar, const string& foto) {
     lock_guard<mutex> g(mutexBD);
-    // El texto introducido se almacena literalmente, sin sal ni funcion hash.
+    // El texto que se mete se guarda literal, sin sal ni funcion hash.
     return ejec("INSERT INTO dbo.Usuarios(nombre, clave, avatar, foto) VALUES(?1, ?2, ?3, ?4)",
                 {nombre, clave, avatar, foto});
 }
@@ -285,8 +285,8 @@ bool BaseDatos::perfil(const string& nombre, string& avatar, string& foto) {
     return true;
 }
 
-// La identidad se toma de la sesion autenticada; no de un nombre aportado por el cliente.
-// Primero se eliminan las referencias que no tienen cascada en SQL Server.
+// La identidad sale de la sesion ya autenticada; no de un nombre que mande el cliente.
+// Primero se borran las referencias que no tienen cascada en SQL Server.
 bool BaseDatos::eliminarCuenta(const string& usuario) {
     lock_guard<mutex> g(mutexBD);
     if (!ejec("BEGIN TRANSACTION")) return false;
@@ -311,7 +311,7 @@ bool BaseDatos::eliminarCuenta(const string& usuario) {
 bool BaseDatos::guardarMensaje(MensajeGuardado& m) {
     lock_guard<mutex> g(mutexBD);
 
-    // Un mensaje usa SOLO la llave que le toca (los demas quedan en NULL; ver el CHECK de la tabla).
+    // Un mensaje usa SOLO la llave que le toca (las demas quedan en NULL; ver el CHECK de la tabla).
     string idGrupo = (m.ambito == "R") ? m.clave : "";
     string idCanal = (m.ambito == "C") ? m.clave : "";
 
@@ -347,7 +347,7 @@ bool BaseDatos::borrarMensaje(long long id) {
     lock_guard<mutex> g(mutexBD);
     if (!ejec("BEGIN TRANSACTION")) return false;
 
-    // Copiar solo metadatos antes de borrar el texto. Ambas operaciones son atomicas.
+    // Copiar solo los metadatos antes de borrar el texto. Las dos operaciones son atomicas.
     bool ok = ejec("INSERT INTO dbo.MensajesEliminados "
                    "(idMensaje, tipo, idAutor, idDestino, idGrupo, idCanal, fechaEnvio) "
                    "SELECT idMensaje, tipo, idAutor, idDestino, idGrupo, idCanal, fechaEnvio "
@@ -380,7 +380,7 @@ vector<MensajeGuardado> BaseDatos::historial(const string& ambito, const string&
         return {};
     }
 
-    // limite <= 0 significa historial completo, usado por los canales.
+    // limite <= 0 quiere decir historial completo, lo usan los canales.
     string finalSQL = "ORDER BY m.idMensaje DESC";
     if (limite > 0) finalSQL += " OFFSET 0 ROWS FETCH NEXT " + to_string(limite) + " ROWS ONLY";
     auto filas = cons(string(SELECT_MENSAJE) + donde + finalSQL, params);
@@ -421,7 +421,7 @@ vector<MensajeGuardado> BaseDatos::historialDirecto(const string& a, const strin
 
 vector<string> BaseDatos::companerosDirectos(const string& usuario) {
     lock_guard<mutex> g(mutexBD);
-    // Incluye conversaciones cuyos UNICOS mensajes fueron eliminados.
+    // Incluye conversaciones donde los UNICOS mensajes fueron eliminados.
     auto filas = cons("SELECT DISTINCT CASE WHEN ua.nombre = ?1 THEN ud.nombre ELSE ua.nombre END "
                       "FROM (SELECT idAutor, idDestino FROM dbo.Mensajes WHERE tipo = 'D' "
                       "UNION ALL SELECT idAutor, idDestino FROM dbo.MensajesEliminados WHERE tipo = 'D') m "
@@ -523,8 +523,8 @@ bool BaseDatos::esMiembroGrupo(long long id, const string& usuario) {
                  "WHERE gm.idGrupo = ?1 AND u.nombre = ?2", {to_string(id), usuario}).empty();
 }
 
-// El permiso se comprueba en la MISMA operacion SQL: no basta con el boton del cliente.
-// El contador de filas distingue una insercion real de una invitacion duplicada.
+// El permiso se checa en la MISMA operacin SQL: no basta con el boton del cliente.
+// El contador de filas distingue entre un insert de verdad y una invitacion repetida.
 bool BaseDatos::agregarMiembroGrupo(long long id, const string& dueno, const string& nuevo) {
     lock_guard<mutex> g(mutexBD);
     return ejec("INSERT INTO dbo.GrupoMiembros(idGrupo, idUsuario) "
@@ -537,7 +537,7 @@ bool BaseDatos::agregarMiembroGrupo(long long id, const string& dueno, const str
 
 bool BaseDatos::quitarMiembroGrupo(long long id, const string& solicitante, const string& miembro) {
     lock_guard<mutex> g(mutexBD);
-    // El dueno no puede expulsarse, ni abandonar una sala de la cual es propietario.
+    // El dueno no se puede expulsar, ni salirse de una sala de la que es propietario.
     return ejec("DELETE FROM dbo.GrupoMiembros WHERE idGrupo = ?1 "
                 "AND idUsuario = (SELECT idUsuario FROM dbo.Usuarios WHERE nombre = ?3) "
                 "AND EXISTS (SELECT 1 FROM dbo.Grupos g "
@@ -573,7 +573,7 @@ long long BaseDatos::crearCanal(const string& nombre, const string& dueno) {
 
     long long id = -1;
 
-    // Si el nombre ya existe, UNIQUE hace fallar el INSERT.
+    // Si el nombre ya existe, el UNIQUE hace que falle el INSERT.
     bool ok = ejec("INSERT INTO dbo.Canales(nombre, idDueno) OUTPUT inserted.idCanal VALUES(?1, (SELECT idUsuario FROM dbo.Usuarios WHERE nombre = ?2))",
                    {nombre, dueno}, &id) &&
               ejec("INSERT INTO dbo.CanalMiembros(idCanal, idUsuario) VALUES(?1, (SELECT idUsuario FROM dbo.Usuarios WHERE nombre = ?2))",

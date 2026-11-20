@@ -5,8 +5,8 @@
 #include <ctime>
 #include <string>
 
-// La base de datos sigue guardando las fechas en la zona horaria del servidor.
-// El protocolo de red usa segundos UNIX (instante absoluto, sin zona horaria).
+// La base de datos sigue guardando las fechas en la hora del servidor.
+// Pero por la red mandamos segundos UNIX (un instante absoluto, sin zona horaria).
 inline std::string fechaInstante(const std::string& fecha) {
     int anio = 0, mes = 0, dia = 0, hora = 0, minuto = 0, segundo = 0;
     if (std::sscanf(fecha.c_str(), "%d-%d-%d %d:%d:%d",
@@ -19,14 +19,14 @@ inline std::string fechaInstante(const std::string& fecha) {
     local.tm_hour = hora;
     local.tm_min = minuto;
     local.tm_sec = segundo;
-    local.tm_isdst = -1; // deja al sistema determinar el horario de verano
+    local.tm_isdst = -1; // deja que el sistema decida si es horario de verano o no
     const std::time_t instante = std::mktime(&local);
     if (instante == static_cast<std::time_t>(-1)) return fecha;
     return std::to_string(static_cast<long long>(instante));
 }
 
-// El cliente grafico (un solo hilo) presenta la hora de SU computadora.
-// Si recibe el formato anterior HH:MM, lo conserva sin convertirlo.
+// El cliente grafico (un solo hilo) muestra la hora de SU compu.
+// Si le llega el formato viejo HH:MM lo deja igualito, sin convertir nada.
 inline std::string horaLocalCliente(const std::string& marca) {
     if (marca.size() < 10 || marca.find_first_not_of("0123456789") != std::string::npos)
         return marca;

@@ -1,4 +1,4 @@
-# Alternativa a CMake SOLO PARA EL SERVIDOR (necesita g++, make y unixodbc-dev).
+# Alternativa a CMake SOLO PARA EL SERVIDOR (ocupa g++, make y unixodbc-dev).
 # El cliente se compila con CMake (ver README).
 #   make          -> ./servidor
 #   make clean

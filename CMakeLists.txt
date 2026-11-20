@@ -7,7 +7,7 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
 	set(CMAKE_BUILD_TYPE Release)
 endif()
 
-# El servidor usa sockets POSIX: solo Linux/macOS. El cliente compila en los tres sistemas.
+# El servidor usa sockets POSIX, asi que solo va en Linux/macOS. El cliente compila en los tres.
 if(UNIX)
 	set(SERVIDOR_POR_DEFECTO ON)
 else()
@@ -33,8 +33,8 @@ endif()
 
 # ======================= CLIENTE (SFML) =======================
 if(BUILD_CLIENTE)
-	# Usa SFML 2.5/2.6 instalada; si no hay (o es SFML 3, que es incompatible),
-	# la descarga y compila sola con FetchContent (necesita internet la primera vez).
+	# Usa la SFML 2.5/2.6 que ya este instalada; si no hay (o es SFML 3, que no es compatible),
+	# la baja y la compila solita con FetchContent (ocupa internet la primera vez).
 	find_package(SFML 2.5 COMPONENTS network graphics window system QUIET)
 
 	if(NOT SFML_FOUND)
@@ -61,7 +61,7 @@ if(BUILD_CLIENTE)
 		src/comun/Base64.cpp)
 	target_link_libraries(cliente PRIVATE sfml-network sfml-graphics sfml-window sfml-system)
 
-	# Para que la fuente se encuentre aunque muevas el ejecutable o lo abras con doble clic.
+	# Pa que la fuente se encuentre aunque muevas el ejecutable o lo abras con doble clic.
 	target_compile_definitions(cliente PRIVATE RECURSOS_DIR="${CMAKE_SOURCE_DIR}/recursos")
 	add_custom_command(TARGET cliente POST_BUILD
 		COMMAND ${CMAKE_COMMAND} -E copy_directory

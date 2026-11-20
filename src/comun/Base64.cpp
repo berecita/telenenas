@@ -52,7 +52,7 @@ bool base64Decodificar(const std::string& texto, std::string& salida) {
             unsigned char c = static_cast<unsigned char>(texto[i + j]);
 
             if (c == '=') {
-                // el relleno solo es valido en las ultimas 2 posiciones del ultimo bloque
+                // el relleno solo puede ir en las ultimas 2 posiciones del ultimo bloque
                 if (i + 4 != texto.size() || j < 2) return false;
                 v[j] = 0;
                 relleno++;

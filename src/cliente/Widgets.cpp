@@ -16,7 +16,7 @@ Boton::Boton() : hover(false), activo(false) {
 
 void Boton::setColor(const sf::Color& normal) {
     colorNormal = normal;
-    // al pasar el mouse el boton se oscurece un poco
+    // cuando pasas el mouse el boton se oscurece tantito
     colorHover = sf::Color(static_cast<sf::Uint8>(std::max(0, normal.r - 28)),
                            static_cast<sf::Uint8>(std::max(0, normal.g - 28)),
                            static_cast<sf::Uint8>(std::max(0, normal.b - 28)));
@@ -90,7 +90,7 @@ void CampoTexto::recibirCaracter(sf::Uint32 unicode) {
         return;
     }
 
-    if (unicode == 8) {                    // backspace: borra UN caracter (aunque sea acentuado)
+    if (unicode == 8) {                    // backspace: borra UN caracter (aunque tenga acento)
         while (!contenido.empty()) {
             unsigned char ultimo = static_cast<unsigned char>(contenido.back());
             contenido.pop_back();
@@ -99,7 +99,7 @@ void CampoTexto::recibirCaracter(sf::Uint32 unicode) {
             }
         }
         if (modo == ModoCampo::FECHA_MMAA && !contenido.empty() && contenido.back() == '/') {
-            contenido.pop_back(); // al borrar despues de "12/" se va tambien la barra
+            contenido.pop_back(); // al borrar despues de "12/" tambien se va la diagonal
         }
         return;
     }
@@ -141,7 +141,7 @@ void CampoTexto::recibirCaracter(sf::Uint32 unicode) {
 
     std::string bytes;
 
-    if (unicode >= 32 && unicode < 127) {           // ASCII imprimible
+    if (unicode >= 32 && unicode < 127) {           // ASCII que se puede imprimir
         bytes += static_cast<char>(unicode);
     } else if (unicode >= 0xA0 && unicode <= 0x24F) { // letras con acento, ñ, ¿, ¡, etc. (UTF-8 de 2 bytes)
         bytes += static_cast<char>(0xC0 | (unicode >> 6));
@@ -153,7 +153,7 @@ void CampoTexto::recibirCaracter(sf::Uint32 unicode) {
     if (contenido.size() + bytes.size() <= maxLongitud) {
         contenido += bytes;
     }
-    // Enter (13) y Tab (9) los maneja quien usa el campo, no el campo.
+    // El Enter (13) y el Tab (9) los ve quien use el campo, no el campo en si.
 }
 
 const std::string& CampoTexto::getContenido() const {
@@ -191,7 +191,7 @@ void CampoTexto::dibujar(Ventana& ventana) {
         mostrado += "_";
     }
 
-    // Si el texto es mas largo que la caja, se muestra solo el FINAL (lo que se esta
+    // Si el texto es mas largo que la caja, solo se muestra el FINAL (lo que se esta
     // escribiendo), quitando caracteres UTF-8 completos del principio.
     const float disponible = r.width - 20.0f;
     while (mostrado.size() > 1 && ventana.medirTexto(mostrado, 20) > disponible) {

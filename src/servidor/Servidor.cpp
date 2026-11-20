@@ -39,7 +39,7 @@ static void escribirLog(const string& texto) {
 }
 
 // ---------------------------------------------------------------------
-// Utilidades
+// Cosas utiles
 // ---------------------------------------------------------------------
 
 static string minusculas(string s) {
@@ -142,15 +142,15 @@ static bool leerLinea(Sesion& s, string& linea) {
     }
 }
 
-// Linea de mensaje para el cliente. `clave` es la que ve ESE cliente.
+// Linea de mensaje pal cliente. `clave` es la que ve ESE cliente.
 static string lineaMensaje(const MensajeGuardado& m, const string& clave) {
     string cabecera = m.ambito + "|" + clave + "|" + to_string(m.id) + "|" + fechaInstante(m.fecha) + "|" + m.autor;
-    if (m.eliminado) return "MD|" + cabecera; // marca persistente sin texto
+    if (m.eliminado) return "MD|" + cabecera; // marca que se queda guardada, sin texto
     return "M|" + cabecera + "|" + m.texto;
 }
 
 // ---------------------------------------------------------------------
-// Envio
+// Mandar cosas
 // ---------------------------------------------------------------------
 
 Servidor::Servidor(int puerto, const string& rutaBD) : puerto(puerto), rutaBD(rutaBD) {}
@@ -215,7 +215,7 @@ void Servidor::difundirUsuarios() {
 // Conexion de un cliente
 // ---------------------------------------------------------------------
 
-// Espera REGISTRO o LOGIN. Regresa true cuando el usuario ya quedo dentro.
+// Espera REGISTRO o LOGIN. Regresa true cuando el usuario ya quedo adentro.
 bool Servidor::autenticar(const SesionPtr& s) {
     string linea;
 
@@ -241,7 +241,7 @@ bool Servidor::autenticar(const SesionPtr& s) {
             }
 
             if (motivo.empty() && !perfil.empty()) {
-                if (perfil.rfind("animal:", 0) == 0) {            // avatar predeterminado
+                if (perfil.rfind("animal:", 0) == 0) {            // avatar de default
                     avatar = perfil.substr(7);
                     if (!esAvatarPredeterminado(avatar)) motivo = "Ese avatar no existe.";
                 } else {                                          // foto propia (base64)
@@ -308,15 +308,15 @@ bool Servidor::autenticar(const SesionPtr& s) {
     return false;
 }
 
-// Manda todo lo que el cliente necesita para pintar su pantalla: historiales,
-// grupos y canales. (Las fotos las pide el cliente cuando las necesita.)
+// Manda todo lo que el cliente necesita pa pintar su pantlla: historiales,
+// grupos y canales. (Las fotos las pide el cliente cuando las ocupa.)
 void Servidor::enviarEstadoInicial(const SesionPtr& s) {
     const string& yo = s->usuario;
     const int LIMITE = 50; // general, directos y grupos; los canales no tienen limite
 
-    // Al actualizar a esta version, considerar ya leido el historial previo.
-    // Esto se ejecuta una sola vez por cuenta; despues los mensajes recibidos
-    // mientras el usuario esta desconectado SI se notifican al volver a entrar.
+    // Al actualizar a esta version, se considera leido el historial de antes.
+    // Esto se ejecuta nomas una vez por cuenta; despues los mensajes que lleguen
+    // mientras el usuario esta desconectado SI se avisan cuando vuelva a entrar.
     if (!bd.lecturasInicializadas(yo)) {
         bd.marcarLeido(yo, "G", "general", bd.ultimoIdConversacion(yo, "G", "general"));
         for (const auto& otro : bd.companerosDirectos(yo))
@@ -469,7 +469,7 @@ void Servidor::procesarComando(const SesionPtr& s, const string& linea, bool& sa
 }
 
 // ---------------------------------------------------------------------
-// Comandos
+// Los comandos
 // ---------------------------------------------------------------------
 
 void Servidor::cmdGeneral(const SesionPtr& s, const string& textoCrudo) {
@@ -590,8 +590,8 @@ void Servidor::cmdGrupoMensaje(const SesionPtr& s, const string& idTexto, const 
     enviarAVarios(bd.miembrosGrupo(id), lineaMensaje(m, m.clave));
 }
 
-// Las altas y bajas notifican a los miembros conectados. Un miembro nuevo
-// recibe primero GRUPO y luego el historial para que Chat pueda asociarlo.
+// Las altas y bajas les avisan a los miembros conectados. Un miembro nuevo
+// recibe primero GRUPO y luego el historial pa que Chat lo pueda asociar.
 void Servidor::cmdGrupoAgregar(const SesionPtr& s, const string& idTexto, const string& usuarioCrudo) {
     long long id;
     SalaGuardada sala;
@@ -710,7 +710,7 @@ void Servidor::cmdCanalNuevo(const SesionPtr& s, const string& nombreCrudo) {
 
     escribirLog("[canal] " + s->usuario + " creo '" + nombre + "'");
 
-    // Todos los conectados ven el canal nuevo en su lista; solo el dueño aparece ya unido.
+    // Todos los conectados ven el canal nuevo en su lista; solo el dueño sale ya unido.
     vector<SesionPtr> todas;
     {
         lock_guard<mutex> g(mutexEnLinea);
@@ -742,14 +742,14 @@ void Servidor::cmdCanalUnir(const SesionPtr& s, const string& idTexto) {
     enviar(s, "CANAL|" + to_string(id) + "|" + canal.nombre + "|" + canal.dueno + "|1");
     enviar(s, "LECTURA|C|" + idTexto + "|" + to_string(ultimo));
 
-    // Al unirse ve todo lo que se envio antes al canal.
+    // Cuando se une ve todo lo que se mando antes al canal.
     for (const auto& m : bd.historial("C", to_string(id), 0)) {
         enviar(s, lineaMensaje(m, to_string(id)));
     }
 }
 
-// Lista privada: solo el propietario recibe los miembros, tambien desconectados.
-// Una linea por usuario evita superar el limite de bytes si hay muchos suscriptores.
+// Lista privada: solo el propietario recibe los miembros, tambien los desconectados.
+// Una linea por usuario pa no pasarnos del limite de bytes si hay muchos suscriptores.
 void Servidor::cmdCanalMiembros(const SesionPtr& s, const string& idTexto) {
     long long id;
     SalaGuardada canal;
@@ -784,13 +784,13 @@ void Servidor::cmdCanalEliminar(const SesionPtr& s, const string& idTexto) {
         enviar(s, "AVISO|No se pudo eliminar el canal.");
         return;
     }
-    // Todos ven el catalogo de canales, incluso quienes no se han unido.
+    // Todos ven el catalogo de canales, incluso los que no se han unido.
     difundir("CANAL_ELIMINADO|" + idTexto);
     enviar(s, "AVISO|Canal eliminado.");
 }
 
 void Servidor::cmdEliminarCuenta(const SesionPtr& s, const string& clave, bool& salir) {
-    // Autenticacion adicional: evita borrados por un clic accidental o una sesion abierta.
+    // Autenticacion extra: evita borrados por un clic accidental o una seison que se quedo abierta.
     string real, claveGuardada;
     if (!bd.credenciales(s->usuario, real, claveGuardada) || claveGuardada != clave) {
         enviar(s, "AVISO|Contrasena incorrecta. No se elimino la cuenta.");
@@ -805,7 +805,7 @@ void Servidor::cmdEliminarCuenta(const SesionPtr& s, const string& clave, bool& 
     for (const auto& c : bd.todosLosCanales()) {
         if (minusculas(c.dueno) == minusculas(s->usuario)) canalesPropios.push_back(to_string(c.id));
     }
-    // Capturamos los receptores ANTES del borrado en cascada.
+    // Guardamos los receptores ANTES del borrado en cascada.
     vector<vector<string>> receptores;
     for (const string& id : gruposPropios) receptores.push_back(bd.miembrosGrupo(stoll(id)));
 
@@ -818,7 +818,7 @@ void Servidor::cmdEliminarCuenta(const SesionPtr& s, const string& clave, bool& 
         enviarAVarios(receptores[i], "GRUPO_ELIMINADO|" + gruposPropios[i]);
     }
     for (const string& id : canalesPropios) difundir("CANAL_ELIMINADO|" + id);
-    // El resto de conversaciones tambien pierde los mensajes escritos por esta cuenta.
+    // Las demas conversaciones tambien pierden los mensajes que escribio esta cuenta.
     difundir("CUENTA_BORRADA|" + s->usuario);
     enviar(s, "CUENTA_ELIMINADA");
     escribirLog("[cuenta] Se elimino el usuario " + s->usuario);
@@ -857,8 +857,8 @@ void Servidor::cmdCanalMensaje(const SesionPtr& s, const string& idTexto, const 
     enviarAVarios(bd.miembrosCanal(id), lineaMensaje(m, m.clave));
 }
 
-// Confirma lectura solo de conversaciones autorizadas. El cursor nunca puede
-// superar el ID realmente existente en esa conversacion.
+// Confirma la lectura solo de conversaciones autorizadas. El cursor nunca puede
+// pasarse del ID que de verdad existe en esa conversacion.
 void Servidor::cmdMarcarLeido(const SesionPtr& s, const string& ambito,
                              const string& clave, const string& idTexto) {
     long long id;
@@ -919,7 +919,7 @@ void Servidor::cmdBorrar(const SesionPtr& s, const string& idTexto) {
     if (m.ambito == "G") {
         difundir("DEL|G|general|" + idTxt);
     } else if (m.ambito == "D") {
-        // cada quien lo ve bajo el nombre del OTRO
+        // cada quien lo ve con el nombre del OTRO
         enviarA(m.autor, "DEL|D|" + m.destino + "|" + idTxt);
         enviarA(m.destino, "DEL|D|" + m.autor + "|" + idTxt);
     } else if (m.ambito == "R") {
@@ -930,7 +930,7 @@ void Servidor::cmdBorrar(const SesionPtr& s, const string& idTexto) {
 }
 
 // ---------------------------------------------------------------------
-// Arranque
+// Arrancar el servidor
 // ---------------------------------------------------------------------
 
 bool Servidor::iniciar() {
@@ -985,7 +985,7 @@ bool Servidor::iniciar() {
 
         if (fd == -1) continue;
 
-        // Si un cliente deja de leer, send() no se queda bloqueado para siempre.
+        // Si un cliente deja de leer, send() no se queda bloqueado pa siempre.
         timeval limite;
         limite.tv_sec = 5;
         limite.tv_usec = 0;
@@ -994,7 +994,7 @@ bool Servidor::iniciar() {
         auto sesion = make_shared<Sesion>();
         sesion->fd = fd;
 
-        thread(&Servidor::atender, this, sesion).detach(); // un hilo por cliente
+        thread(&Servidor::atender, this, sesion).detach(); // un hilo por cada cliente
     }
 
     cout << "\nApagando servidor..." << endl;

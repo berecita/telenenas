@@ -6,9 +6,9 @@
 #include "Ventana.h"
 
 // ---------------------------------------------------------------------
-// Componentes de interfaz reutilizables (Boton y CampoTexto).
-// SFML NO trae botones ni campos de texto: solo dibuja formas y texto.
-// Por eso aqui los armamos: un rectangulo + un texto + logica de "el mouse
+// Componentes de interfaz que se pueden reusar (Boton y CampoTexto).
+// SFML NO trae botones ni campos de texto: nomas dibuja formas y texto.
+// Por eso aqui los armaoms nosotros: un rectangulo + un texto + la logica de "el mouse
 // esta encima" / "me hicieron clic" / "estoy recibiendo teclas".
 // ---------------------------------------------------------------------
 
@@ -17,7 +17,7 @@ private:
     sf::RectangleShape forma;
     std::string texto;
     bool hover;   // el mouse esta encima
-    bool activo;  // es la "pestana" seleccionada actualmente
+    bool activo;  // es la "pestana" que esta seleccionada ahorita
     sf::Color colorNormal = sf::Color(255, 153, 220); // #FF99DC
     sf::Color colorHover = sf::Color(255, 120, 207);
 
@@ -28,7 +28,7 @@ public:
     void setTexto(const std::string& t);
     void setActivo(bool a);
 
-    // Cambia el color del boton (el color al pasar el mouse se calcula solo).
+    // Cambia el color del boton (el color de cuando pasas el mouse se calcula solo).
     void setColor(const sf::Color& normal);
 
     // Coordenadas del mouse en pixeles de la ventana.
@@ -39,9 +39,9 @@ public:
 };
 
 // Que caracteres acepta un CampoTexto.
-//   LIBRE        : lo de siempre (letras, numeros, acentos...)
-//   SOLO_DIGITOS : solo 0-9 (numero de tarjeta, CVV, anio)
-//   FECHA_MMAA   : solo digitos; pone la "/" sola despues del mes (12 -> "12/")
+//   LIBRE        : lo normal (letras, numeros, acentos...)
+//   SOLO_DIGITOS : nomas 0-9 (numero de tarjeta, CVV, anio)
+//   FECHA_MMAA   : solo digitos; pone la "/" solita despues del mes (12 -> "12/")
 enum class ModoCampo { LIBRE, SOLO_DIGITOS, FECHA_MMAA };
 
 class CampoTexto {
@@ -67,7 +67,7 @@ public:
     void recibirCaracter(sf::Uint32 unicode);
 
     const std::string& getContenido() const;
-    void setContenido(const std::string& texto); // para rellenar el campo desde el programa
+    void setContenido(const std::string& texto); // pa rellenar el campo desde el programa
     void setMaxLongitud(std::size_t maximo);
     void setModo(ModoCampo m);
     void limpiar();

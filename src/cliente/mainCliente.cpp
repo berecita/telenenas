@@ -2,15 +2,15 @@
 //  TELECHAT - Cliente grafico (SFML)
 //
 //  Funciona en Windows, Linux y macOS: la red usa sf::TcpSocket (SFML
-//  Network) y NO hay hilos. Un solo ciclo hace, en cada cuadro:
+//  Network) y NO hay hilos. Un solo ciclo hace esto en cada cuadro:
 //      1) eventos del teclado/mouse
-//      2) conexion.actualizar()  -> manda y recibe lo pendiente (no bloquea)
+//      2) conexion.actualizar()  -> manda y recibe lo que falta (no bloquea)
 //      3) dibujar
 //
 //  Pantallas:  LOGIN (servidor, usuario, contrasena, foto)  ->  CHAT
 //  Secciones:  General | Directos | Grupos | Canales
 //
-//  Uso:  cliente [ip] [puerto]      (tambien se editan en la pantalla de login)
+//  Uso:  cliente [ip] [puerto]      (tambien los puedes editar en la pantalla de login)
 // =====================================================================
 
 #include "../comun/Protocolo.h"
@@ -36,8 +36,8 @@ enum class Seccion { GENERAL, DIRECTOS, GRUPOS, CANALES };
 enum class Dialogo { NINGUNO, ADMIN_GRUPO, MIEMBROS_CANAL, CONFIRMAR, CUENTA };
 enum class AccionConfirmar { NINGUNA, QUITAR_MIEMBRO, SALIR_GRUPO, ELIMINAR_GRUPO, ELIMINAR_CANAL };
 
-// ---- Paleta rosa (basada en #FF99DC) ----
-static const sf::Color ROSA(255, 153, 220);          // #FF99DC (color principal)
+// ---- Los colores rosita (basados en #FF99DC) ----
+static const sf::Color ROSA(255, 153, 220);          // #FF99DC (el color principal)
 static const sf::Color FONDO(255, 244, 251);
 static const sf::Color BARRA_LATERAL = ROSA;
 static const sf::Color PANEL_LISTA(255, 225, 244);
@@ -48,7 +48,7 @@ static const sf::Color VERDE(30, 140, 90);           // "en linea"
 static const sf::Color SELECCION(255, 190, 232);
 static const sf::Color ACENTO(214, 60, 150);         // puntito de "mensajes nuevos"
 static const sf::Color BORDE(238, 190, 222);
-static const sf::Color BOTON_LATERAL(255, 232, 247); // botones sobre la barra rosa
+static const sf::Color BOTON_LATERAL(255, 232, 247); // los botones que van sobre la barra rosa
 
 // ---- Medidas ----
 static const int ANCHO = 1000;
@@ -58,13 +58,13 @@ static const float LISTA_ANCHO = 210.0f;
 static const float LISTA_Y = 70.0f;
 static const float FILA_ALTO = 44.0f;
 
-// Selector de avatares de la pantalla de registro
+// El selector de avatares de la pantalla de registro
 static const float AVATAR_X = 350.0f;
 static const float AVATAR_Y = 394.0f;
 static const float AVATAR_D = 48.0f;
 static const float AVATAR_PASO = 63.0f;
 
-// Control "eliminar" que aparece en el encabezado de MIS mensajes
+// El control de "eliminar" que sale en el encabezado de MIS mensajes
 static const float BORRAR_X = AREA_X + AREA_ANCHO - 84.0f;
 static const float BORRAR_ANCHO = 70.0f;
 
@@ -74,7 +74,7 @@ struct Intento {
     int puerto = 0;
     string usuario;
     string clave;
-    string foto; // base64 (solo al registrarse)
+    string foto; // base64 (solo cuando te registras)
 };
 
 struct ItemLista {
@@ -90,7 +90,7 @@ struct ItemLista {
 };
 
 // ---------------------------------------------------------------------
-// Utilidades
+// Cosas utiles
 // ---------------------------------------------------------------------
 static string quitarEspacios(const string& s) {
     size_t i = 0, j = s.size();
@@ -127,7 +127,7 @@ static void teclearEnCampos(vector<CampoTexto*>& campos, sf::Uint32 unicode) {
     for (CampoTexto* c : campos) c->recibirCaracter(unicode);
 }
 
-// Ctrl+V (o Cmd+V en Mac): pega el portapapeles en el campo que tenga el foco.
+// Ctrl+V (o Cmd+V en Mac): pega lo del portapaeles en el campo que tenga el foco.
 static void pegarEnCampos(vector<CampoTexto*>& campos) {
     sf::String texto = sf::Clipboard::getString();
 
@@ -145,7 +145,7 @@ static void rectangulo(Ventana& v, float x, float y, float ancho, float alto, sf
     v.getWindow().draw(r);
 }
 
-// Acorta texto UTF-8 sin cortar acentos; deja libre la columna de botones.
+// Acorta texto UTF-8 sin romper los acentos; deja libre la columna de botones.
 static string acortarTexto(Ventana& ventana, string texto, unsigned int tamano, float anchoMax) {
     if (ventana.medirTexto(texto, tamano) <= anchoMax) return texto;
     const string puntos = "...";
@@ -157,7 +157,7 @@ static string acortarTexto(Ventana& ventana, string texto, unsigned int tamano, 
     return texto + puntos;
 }
 
-// Lo que se muestra en la lista del medio, segun la seccion.
+// Lo que se muestra en la lista del medio, depende de la seccion.
 static vector<ItemLista> construirLista(Chat& chat, Seccion seccion, bool modoGrupo,
                                         const set<string>& marcados) {
     vector<ItemLista> items;
@@ -193,7 +193,7 @@ static vector<ItemLista> construirLista(Chat& chat, Seccion seccion, bool modoGr
             items.push_back(it);
         }
 
-        // Conversaciones con gente que ahorita no esta conectada.
+        // Conversaciones con gente que ahorita no esta conectada (osea offline).
         for (auto& par : chat.directos) {
             if (par.first == chat.yo || estaEnLinea(par.first)) continue;
 
@@ -297,10 +297,10 @@ int main(int argc, char* argv[]) {
     // =============== CHAT ===============
     Seccion seccion = Seccion::GENERAL;
     string selDirecto, selGrupo, selCanal;
-    bool modoGrupo = false;       // estoy eligiendo los miembros de un grupo nuevo
+    bool modoGrupo = false;       // estoy escogiendo los miembros de un grupo nuevo
     set<string> marcados;
     int scrollLista = 0;
-    long long confirmarBorrado = 0; // id del mensaje que esta esperando el 2do clic de "eliminar"
+    long long confirmarBorrado = 0; // id del mensaje que espera el 2do clic de "eliminar"
     Dialogo dialogo = Dialogo::NINGUNO;
     AccionConfirmar accionConfirmar = AccionConfirmar::NINGUNA;
     string grupoAdministrado, idConfirmar, usuarioConfirmar;
@@ -330,10 +330,10 @@ int main(int argc, char* argv[]) {
     Boton botonCrearCanal("Crear canal", LISTA_X, 556, LISTA_ANCHO, 44);
     Boton botonUnirse("Unirme al canal", AREA_X + AREA_ANCHO / 2 - 100, AREA_Y + AREA_ALTO / 2 + 10, 200, 46);
 
-    // Administracion: acciones visibles segun permisos, con dialogos de confirmacion.
-    // Botones en el encabezado derecho, lejos de la etiqueta "Mensaje" (y=536).
+    // Administracion: las acciones que se ven dependen de los permisos, con dialogos pa confirmar.
+    // Botones en el encabezado de la derecha, lejos de la etiqueta "Mensaje" (y=536).
     Boton botonGestionGrupo("Administrar grupo", 790, 15, 195, 34);
-    // Dos botones independientes, ambos caben en la columna derecha del encabezado.
+    // Dos botones independientes, los dos caben en la columna derecha del encabezado.
     Boton botonVerMiembrosCanal("Ver miembros", 700, 15, 125, 34);
     Boton botonEliminarCanal("Eliminar canal", 833, 15, 152, 34);
     Boton botonEliminarCuenta("Eliminar cuenta", 15, 515, 160, 40);
@@ -395,7 +395,7 @@ int main(int argc, char* argv[]) {
                     mostrarError(error);
                     return;
                 }
-            } else if (avatarElegido >= 0) {       // o el animalito que eligio
+            } else if (avatarElegido >= 0) {       // o el animalito que escogio
                 intento.foto = string("animal:") + AVATARES_PREDETERMINADOS[avatarElegido];
             }
         }
@@ -403,10 +403,10 @@ int main(int argc, char* argv[]) {
         mensajeLogin = "Conectando...";
         mensajeEsError = false;
         fase = Fase::CONECTANDO;
-        framesConectando = 0; // se espera un par de cuadros para que el mensaje alcance a dibujarse
+        framesConectando = 0; // se espera un par de cuadros pa que el mensaje alcance a dibujarse
     };
 
-    // Se conecta (esto bloquea hasta 3 s) y manda LOGIN o REGISTRO.
+    // Se conecta (OJO: esto bloquea hasta 3 s, ni modo) y manda LOGIN o REGISTRO.
     auto ejecutarConexion = [&]() {
         string error;
 
@@ -447,7 +447,7 @@ int main(int argc, char* argv[]) {
         }
     };
 
-    // La conversacion que se ve en el panel derecho (nullptr si no hay una elegida).
+    // La conversacion que se ve en el panel derecho (nullptr si no hay ninguna elegida).
     auto conversacionActual = [&]() -> Conversacion* {
         if (!chat) return nullptr;
 
@@ -491,7 +491,7 @@ int main(int argc, char* argv[]) {
         return 0;
     };
 
-    // En canales solo escribe el dueño; en lo demas, cualquiera con la conversacion abierta.
+    // En canales solo escribe el dueño; en lo demas, cualquiera que tenga la conversacion abierta.
     auto puedeEscribir = [&](const Conversacion* conv) {
         if (conv == nullptr || !conexion.estaActiva()) return false;
         if (seccion == Seccion::CANALES) return conv->unido && conv->dueno == chat->yo;
@@ -575,7 +575,7 @@ int main(int argc, char* argv[]) {
         enfocar(camposChat, &campoMensaje);
     };
 
-    // Campos de texto que estan en pantalla ahora mismo (para Tab, clics y teclas).
+    // Campos de texto que estan en pantalla ahorita (pa Tab, clics y teclas).
     auto camposVisibles = [&]() {
         if (dialogo == Dialogo::CUENTA) return vector<CampoTexto*>{&campoClaveEliminar};
         if (dialogo == Dialogo::ADMIN_GRUPO) {
@@ -647,7 +647,7 @@ int main(int argc, char* argv[]) {
             vector<CampoTexto*> visibles = camposVisibles();
             Conversacion* conv = conversacionActual();
 
-            // Los dialogos interceptan los eventos para no tocar accidentalmente el chat.
+            // Los dialogos se tragan los eventos pa no tocar el chat sin querer.
             if (dialogo != Dialogo::NINGUNO) {
                 if (pegar) {
                     pegarEnCampos(visibles);
@@ -779,7 +779,7 @@ int main(int argc, char* argv[]) {
 
                 clicEnCampos(visibles, mx, my);
 
-                // -- eliminar un mensaje mio: el primer clic pide confirmacion, el segundo lo borra --
+                // -- eliminar un mensaje mio: el primer clic pide confirmacion, el segundo ya lo borra --
                 long long idBorrar = idEliminarEn(conv, mx, my);
 
                 if (idBorrar != 0 && confirmarBorrado == idBorrar) {
@@ -952,7 +952,7 @@ int main(int argc, char* argv[]) {
 
             for (CampoTexto* c : camposLogin) c->dibujar(ventana);
 
-            // Selector de avatar (animalitos predeterminados)
+            // Selector de avatar (los animalitos de default)
             ventana.dibujarTexto("Elige un avatar (opcional, solo al registrarte)", AVATAR_X, 370, 15, TEXTO_SUAVE);
 
             for (int i = 0; i < NUM_AVATARES; i++) {
@@ -960,7 +960,7 @@ int main(int argc, char* argv[]) {
                 float dx = mx - (ax + AVATAR_D / 2), dy = my - (AVATAR_Y + AVATAR_D / 2);
                 bool encima = dx * dx + dy * dy <= (AVATAR_D / 2) * (AVATAR_D / 2);
 
-                if (i == avatarElegido || encima) { // aro detras del avatar
+                if (i == avatarElegido || encima) { // aro atras del avatar
                     sf::CircleShape aro(AVATAR_D / 2 + 4.0f);
                     aro.setPosition(ax - 4.0f, AVATAR_Y - 4.0f);
                     aro.setFillColor(i == avatarElegido ? ACENTO : SELECCION);
@@ -985,7 +985,7 @@ int main(int argc, char* argv[]) {
                 botonSeccion[i].actualizarHover(mx, my);
             }
 
-            // Marca "•" si hay mensajes sin leer en una seccion.
+            // Pone la marca "•" si hay mensajes sin leer en una seccion.
             bool nuevosDirectos = false, nuevosGrupos = false, nuevosCanales = false;
             for (auto& p : c.directos) nuevosDirectos = nuevosDirectos || (p.second.nuevos && !(seccion == Seccion::DIRECTOS && p.first == selDirecto));
             for (auto& p : c.grupos) nuevosGrupos = nuevosGrupos || (p.second.nuevos && !(seccion == Seccion::GRUPOS && p.first == selGrupo));
@@ -1120,8 +1120,8 @@ int main(int argc, char* argv[]) {
                     break;
             }
 
-            // Reservamos la columna derecha del encabezado para las acciones.
-            // Se acorta cualquier título/subtítulo largo para que no invada los botones.
+            // Nos reservamos la columna derecha del encabezado pa las acciones.
+            // Se acorta cualquier titulo/subtitulo largo pa que no se encime con los botones.
             bool hayAccionSala = conexion.estaActiva() && conv &&
                 (seccion == Seccion::GRUPOS || (seccion == Seccion::CANALES && conv->dueno == c.yo));
             if (hayAccionSala) {
@@ -1132,7 +1132,7 @@ int main(int argc, char* argv[]) {
             ventana.dibujarTexto(titulo, AREA_X, 14, 24, TEXTO_OSCURO);
             ventana.dibujarTexto(subtitulo, AREA_X, 44, 13, TEXTO_SUAVE);
 
-            // Las acciones quedan en el encabezado, NO encima del campo "Mensaje".
+            // Las acciones se quedan en el encabezado, NO encima del campo "Mensaje".
             if (conexion.estaActiva() && seccion == Seccion::GRUPOS && conv) {
                 botonGestionGrupo.actualizarHover(mx, my);
                 botonGestionGrupo.dibujar(ventana);
@@ -1185,7 +1185,7 @@ int main(int argc, char* argv[]) {
                     ventana.dibujarTexto("Aún no hay mensajes. ¡Escribe el primero!", AREA_X + 14, AREA_Y + 14, 15, TEXTO_SUAVE);
                 }
 
-                // barrita de scroll (solo si hay mas lineas de las que caben)
+                // barita de scroll (solo si hay mas lineas de las que caben)
                 if (total > LINEAS_VISIBLES) {
                     float proporcion = static_cast<float>(LINEAS_VISIBLES) / static_cast<float>(total);
                     float altoBarra = max(24.0f, (AREA_ALTO - 8.0f) * proporcion);
@@ -1202,7 +1202,7 @@ int main(int argc, char* argv[]) {
                                          AREA_X + 10.0f, AREA_Y + AREA_ALTO - 22.0f, 13, TEXTO_SUAVE);
                 }
 
-            } else if (conv != nullptr) { // canal al que aun no me uno
+            } else if (conv != nullptr) { // canal al que todavia no me uno
                 ventana.dibujarTextoCentrado("Aún no te has unido a este canal.",
                                              sf::FloatRect(AREA_X, AREA_Y + AREA_ALTO / 2 - 40, AREA_ANCHO, 30),
                                              17, TEXTO_SUAVE);
@@ -1239,7 +1239,7 @@ int main(int argc, char* argv[]) {
                 ventana.dibujarTexto(c.aviso, AREA_X, 612, 14, ROJO_ERROR);
             }
 
-            // Dialogos modales: evitan eliminar algo con un clic no intencional.
+            // Dialogos modales: asi no se elimina algo con un clic sin querer.
             if (dialogo != Dialogo::NINGUNO) {
                 rectangulo(ventana, 0, 0, ANCHO, ALTO, sf::Color(60, 20, 55, 165));
                 if (dialogo == Dialogo::ADMIN_GRUPO) {
@@ -1340,7 +1340,7 @@ int main(int argc, char* argv[]) {
                     ventana.dibujarTexto("Eliminar mi cuenta", 305, 190, 25, ROJO_ERROR);
                     ventana.dibujarTexto("Esta accion es irreversible: se eliminaran", 305, 235, 15, TEXTO_OSCURO);
                     ventana.dibujarTexto("tus mensajes, grupos y canales creados.", 305, 258, 15, TEXTO_OSCURO);
-                    // CampoTexto ya dibuja su propia etiqueta (24 px sobre la caja).
+                    // CampoTexto ya dibuja su propia etiqueta (24 px arriba de la caja).
                     campoClaveEliminar.dibujar(ventana);
                     botonConfirmarCuenta.setTexto(confirmarCuenta ? "Si, eliminar definitivamente" : "Eliminar mi cuenta");
                     botonConfirmarCuenta.actualizarHover(mx, my);
@@ -1357,7 +1357,7 @@ int main(int argc, char* argv[]) {
     // =================== CIERRE ORDENADO ===================
     if (conexion.estaActiva()) {
         conexion.enviar("SALIR");
-        conexion.actualizar(); // intenta mandar el SALIR antes de cerrar
+        conexion.actualizar(); // trata de mandar el SALIR antes de cerrar
     }
 
     conexion.cerrar();

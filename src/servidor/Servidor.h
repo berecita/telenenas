@@ -10,13 +10,13 @@
 #include <string>
 #include <vector>
 
-// Una conexion de un cliente. Varios hilos pueden mandarle datos a la vez
+// Una conexin de un cliente. Varios hilos le pueden mandar datos a la vez
 // (el suyo y los de otros usuarios que le escriben), por eso `envio` es un
-// mutex: evita que dos lineas se mezclen byte por byte en el socket.
+// mutex: pa que dos lineas no se mezclen byte por byte en el socket.
 struct Sesion {
     int fd = -1;
     std::string usuario;       // vacio hasta que inicia sesion
-    std::string entrada;       // bytes recibidos que aun no forman una linea completa
+    std::string entrada;       // bytes que llegaron pero todavia no forman una linea completa
     std::mutex envio;
     std::atomic<bool> activa{true};
 };
@@ -71,7 +71,7 @@ private:
 public:
     Servidor(int puerto, const std::string& rutaBD);
 
-    // Bloquea hasta que llega Ctrl+C. Regresa false si no pudo arrancar.
+    // Se bloquea hasta que llegue Ctrl+C. Regresa false si no pudo arrancar.
     bool iniciar();
 };
 

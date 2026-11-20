@@ -1,9 +1,9 @@
 // =====================================================================
-//  CHAT - Servidor (solo consola, sin interfaz grafica)
+//  CHAT - Servidor (solo consola, nada de interfaz grafica)
 //
 //  Uso:   ./servidor [puerto] [nombre_base_SQL]
 //         ./servidor 3041 Telenenas
-//  Parar: Ctrl+C
+//  Pararlo: Ctrl+C
 // =====================================================================
 
 #include "../comun/Protocolo.h"
@@ -17,7 +17,7 @@
 using namespace std;
 
 extern "C" void manejarSenal(int) {
-    solicitarApagado(); // solo levanta una bandera (seguro dentro de un manejador de senales)
+    solicitarApagado(); // solo levanta una bandera (es seguro dentro de un manejador de senales)
 }
 
 int main(int argc, char* argv[]) {

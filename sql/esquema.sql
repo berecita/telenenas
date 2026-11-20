@@ -1,6 +1,6 @@
--- Ejecutar con sqlcmd -d Telenenas -b -i sql/esquema.sql.
--- Las tablas existentes conservan sus filas. El login de la aplicación
--- ya debe tener un usuario en esta base con acceso de lectura y escritura.
+-- Se ejecuta con sqlcmd -d Telenenas -b -i sql/esquema.sql.
+-- Las tablas que ya existen se quedan con sus filas. El login de la aplicacion
+-- ya tiene que tener un usuario en esta base con permiso de leer y escribir.
 SET XACT_ABORT ON;
 IF DB_NAME() <> N'Telenenas'
     THROW 50001, 'Selecciona la base Telenenas antes de ejecutar el esquema.', 1;

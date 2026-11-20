@@ -1,7 +1,7 @@
 #include "Ventana.h"
 #include <iostream>
 
-// Escrito para SFML 2.5 / 2.6 (la de apt en Ubuntu). Si tienen SFML 3.x
+// Hecho pa SFML 2.5 / 2.6 (la de apt en Ubuntu). Si tienen SFML 3.x
 // la sintaxis de sf::Text, sf::Event y sf::VideoMode cambia.
 
 Ventana::Ventana(const std::string& nombreVentana, int anchoVentana, int altoVentana)
@@ -18,19 +18,19 @@ Ventana::Ventana(const std::string& nombreVentana, int anchoVentana, int altoVen
     }
 }
 
-// Prueba varias rutas para no depender de desde que carpeta se ejecuta el
+// Prueba varias rutas pa no depender de desde que carpeta se ejecuta el
 // programa (desde la raiz, desde build/, etc.).
 bool Ventana::cargarFuente() {
     std::vector<std::string> candidatas;
 
 #ifdef RECURSOS_DIR
-    candidatas.push_back(std::string(RECURSOS_DIR) + "/font.ttf"); // ruta absoluta desde CMake
+    candidatas.push_back(std::string(RECURSOS_DIR) + "/font.ttf"); // ruta absoluta que viene de CMake
 #endif
     candidatas.push_back("recursos/font.ttf");
     candidatas.push_back("../recursos/font.ttf");
     candidatas.push_back("../../recursos/font.ttf");
 
-    // Fuentes que suelen traer las distribuciones Linux, por si acaso.
+    // Fuentes que normalmente traen las distros de Linux, por si las dudas.
     candidatas.push_back("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf");
     candidatas.push_back("/usr/share/fonts/TTF/DejaVuSans.ttf");
     candidatas.push_back("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf");
@@ -56,7 +56,7 @@ void Ventana::abrir() {
 
     window.create(sf::VideoMode(ancho, alto), titulo,
                   sf::Style::Titlebar | sf::Style::Close);
-    window.setFramerateLimit(60); // evita gastar el 100% del procesador
+    window.setFramerateLimit(60); // pa que no se coma el 100% del procesador
 }
 
 void Ventana::cerrar() {
@@ -80,7 +80,7 @@ bool Ventana::tieneFuente() const {
 void Ventana::dibujarTexto(const std::string& texto, float x, float y,
                            unsigned int size, sf::Color color) {
     if (!fuenteCargada) {
-        return; // sin fuente no se puede dibujar texto (evita cerrarse de golpe)
+        return; // sin fuente no se puede dibujar texto (asi no se cierra de golpe)
     }
 
     sf::Text t;
@@ -105,7 +105,7 @@ void Ventana::dibujarTextoCentrado(const std::string& texto, const sf::FloatRect
     t.setCharacterSize(size);
     t.setFillColor(color);
 
-    // Truco para centrar: mover el "origen" del texto a su centro y luego
+    // Truco pa centrar: mover el "origen" del texto a su centro y luego
     // ponerlo en el centro del rectangulo.
     sf::FloatRect b = t.getLocalBounds();
     t.setOrigin(b.left + b.width / 2.0f, b.top + b.height / 2.0f);

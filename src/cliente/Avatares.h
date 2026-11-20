@@ -8,20 +8,20 @@
 
 #include "Ventana.h"
 
-// Convierte una imagen del disco (png, jpg, bmp, tga...) en la foto de perfil que
-// se manda al servidor: recorte cuadrado centrado, reducida a 64x64, en RGBA
-// crudo y codificada en base64. Regresa false (y el motivo) si no se pudo.
+// Agarra una imagen del disco (png, jpg, bmp, tga...) y la convierte en la foto de perfil que
+// se manda al servidor: recorte cuadrado al centro, reducida a 64x64, en RGBA
+// crudo y en base64. Regresa false (y el motivo) si no se pudo.
 bool prepararFoto(const std::string& ruta, std::string& base64, std::string& error);
 
-// Guarda las fotos de perfil ya recibidas (como texturas) y sabe dibujarlas.
-// Un "perfil" que manda el servidor puede ser:
-//     ""            -> sin foto: se dibuja un circulo de color con la inicial
-//     "animal:gato" -> uno de los avatares predeterminados (recursos/avatares/gato.png)
-//     base64        -> foto propia de 64x64 RGBA
+// Guarda las fotos de perfil que ya llegaron (como texturas) y sabe dibujarlas.
+// El "perfil" que manda el servidor puede ser:
+//     ""            -> sin foto: dibuja un circulito de color con la inicial
+//     "animal:gato" -> uno de los avatares de default (recursos/avatares/gato.png)
+//     base64        -> tu foto de 64x64 RGBA
 class Avatares {
 private:
-    std::map<std::string, sf::Texture> texturas;       // usuario (minusculas) -> su foto
-    std::map<std::string, sf::Texture> predeterminados; // "gato" -> textura
+    std::map<std::string, sf::Texture> texturas;       // usuario (en minusculas) -> su foto
+    std::map<std::string, sf::Texture> predeterminados; // gato -> su textura
     std::set<std::string> sinFoto;
     std::set<std::string> pedidas;
 
@@ -29,16 +29,16 @@ private:
                         const std::string& nombre);
 
 public:
-    // Carga los 5 animalitos de recursos/avatares/. Regresa false si falta alguno.
+    // Carga los 5 animalitos de recursos/avatares/. Da false si falta alguno.
     bool cargarPredeterminados();
 
-    // Olvida las fotos de usuarios (se usa al iniciar una sesion nueva).
+    // Se olvida de las fotos de los usuarios (se usa cuando se inicia una sesion nueva).
     void limpiarUsuarios();
 
-    // true UNA sola vez por usuario: indica que hay que mandar FOTO_PEDIR.
+    // da true UNA sola vez por usuario: osea que hay que mandar FOTO_PEDIR.
     bool necesitaPedir(const std::string& usuario);
 
-    // Llega "FOTO|usuario|perfil".
+    // Cuando llega "FOTO|usuario|perfil".
     void recibir(const std::string& usuario, const std::string& perfil);
 
     void dibujar(Ventana& ventana, const std::string& usuario, float x, float y, float diametro);

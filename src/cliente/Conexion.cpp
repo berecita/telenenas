@@ -6,7 +6,7 @@ bool Conexion::conectar(const std::string& direccion, unsigned short puerto, int
                         std::string& error) {
     cerrar();
 
-    sf::IpAddress ip(direccion); // acepta "192.168.1.5" y tambien nombres de host (hace DNS)
+    sf::IpAddress ip(direccion); // acepta "192.168.1.5" y tambien nombres de host (ahi hace DNS)
 
     if (ip == sf::IpAddress::None) {
         error = "No se pudo resolver la direccion '" + direccion + "'.";
@@ -21,7 +21,7 @@ bool Conexion::conectar(const std::string& direccion, unsigned short puerto, int
         return false;
     }
 
-    socket.setBlocking(false); // a partir de aqui nunca se espera
+    socket.setBlocking(false); // desde aqui nunca se espera nada
     activa = true;
     entrada.clear();
     salida.clear();
@@ -37,7 +37,7 @@ void Conexion::enviar(const std::string& linea) {
 void Conexion::actualizar() {
     if (!activa) return;
 
-    // ---- enviar lo pendiente ----
+    // ---- mandar lo que falta ----
     while (!salida.empty()) {
         std::size_t enviados = 0;
         sf::Socket::Status estado = socket.send(salida.data(), salida.size(), enviados);
@@ -52,14 +52,14 @@ void Conexion::actualizar() {
         }
 
         if (estado != sf::Socket::Done) {
-            break; // NotReady / Partial: se reintenta en el siguiente cuadro
+            break; // NotReady / Partial: se vuelve a intentar en el siguiente cuadro
         }
     }
 
     // ---- recibir lo que haya llegado ----
     char buffer[8192];
 
-    for (int i = 0; i < 64; i++) { // tope por cuadro para no acaparar el ciclo
+    for (int i = 0; i < 64; i++) { // tope por cuadro pa no acaparar todo el ciclo
         std::size_t recibidos = 0;
         sf::Socket::Status estado = socket.receive(buffer, sizeof(buffer), recibidos);
 
@@ -67,7 +67,7 @@ void Conexion::actualizar() {
             entrada.append(buffer, recibidos);
 
             if (entrada.size() > 4 * MAX_LINEA && entrada.find('\n') == std::string::npos) {
-                activa = false; // el servidor mando basura sin saltos de linea
+                activa = false; // el servidor mando pura basura sin saltos de linea
                 return;
             }
         } else if (estado == sf::Socket::NotReady) {

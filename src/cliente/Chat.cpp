@@ -12,15 +12,15 @@ static const sf::Color TEXTO_SUAVE(150, 100, 138);
 static const sf::Color NOMBRE_MIO(214, 60, 150);
 static const sf::Color NOMBRE_OTRO(112, 82, 190);
 
-static const float SANGRIA = 32.0f;                              // espacio del avatar
-static const float ANCHO_TEXTO = AREA_ANCHO - 10.0f - SANGRIA - 18.0f; // margen derecho y barra de scroll
-static const size_t MAX_MENSAJES = 600;                          // historial maximo por conversacion
+static const float SANGRIA = 32.0f;                              // espacio pal avatar
+static const float ANCHO_TEXTO = AREA_ANCHO - 10.0f - SANGRIA - 18.0f; // margen derecho y la barra de scroll
+static const size_t MAX_MENSAJES = 600;                          // maximo de historial por conversacion
 
 // ---------------------------------------------------------------------
-// Ajuste de texto
+// Pa que el texto no se salga de la caja
 // ---------------------------------------------------------------------
 
-// Posicion del siguiente caracter UTF-8 (las ñ y acentos ocupan 2 bytes).
+// Posicion del siguiente caracter UTF-8 (las ñ y los acentos ocupan 2 bytes).
 static size_t siguienteCaracter(const string& s, size_t i) {
     i++;
     while (i < s.size() && (static_cast<unsigned char>(s[i]) & 0xC0) == 0x80) {
@@ -29,8 +29,8 @@ static size_t siguienteCaracter(const string& s, size_t i) {
     return i;
 }
 
-// Parte un texto en varias lineas para que ninguna pase de `ancho` pixeles.
-// Corta por palabras; si una palabra sola no cabe, la corta por caracteres.
+// Parte un texto en varias lineas pa que ninguna se pase de `ancho` pixelse.
+// Corta por palabras; si una palabra sola no cabe, la corta por letras.
 static vector<string> ajustar(Ventana& v, const string& texto, unsigned int size, float ancho) {
     vector<string> lineas;
     string actual;
@@ -57,7 +57,7 @@ static vector<string> ajustar(Ventana& v, const string& texto, unsigned int size
             actual.clear();
         }
 
-        // Palabra mas ancha que una linea completa: partirla por caracteres.
+        // Palabra mas ancha que una linea entera: hay que partirla por caracteres.
         while (v.medirTexto(palabra, size) > ancho) {
             size_t corte = siguienteCaracter(palabra, 0);
 
@@ -120,7 +120,7 @@ void Chat::agregarLineas(Conversacion& conv, const MensajeVista& m) {
         aviso.x = SANGRIA;
         aviso.xSecundario = SANGRIA + ventana.medirTexto(aviso.principal, TAM_LETRA) + 10.0f;
         aviso.avatar = m.autor;
-        // idMensaje queda en 0: no se puede volver a eliminar el aviso.
+        // idMensaje se queda en 0: ya no se puede volver a eliminar el aviso.
         conv.lineas.push_back(aviso);
         return;
     }
@@ -148,7 +148,7 @@ void Chat::agregarLineas(Conversacion& conv, const MensajeVista& m) {
     }
 }
 
-// Vuelve a calcular todas las lineas a partir de los mensajes (al eliminar uno).
+// Vuelve a calcular todas las lineas desde los mensajes (cuando se elimina uno).
 void Chat::reconstruir(Conversacion& conv) {
     conv.lineas.clear();
 
@@ -163,7 +163,7 @@ void Chat::agregarMensaje(Conversacion& conv, const MensajeVista& m) {
     conv.mensajes.push_back(m);
     agregarLineas(conv, m);
 
-    // Si estoy leyendo mensajes viejos, que la vista no salte con los nuevos.
+    // Si estoy leyendo mensajes viejos, que la vista no salte cuando llegan nuevos.
     if (conv.desplazamiento > 0) {
         conv.desplazamiento += static_cast<int>(conv.lineas.size() - antes);
     }
@@ -174,7 +174,7 @@ void Chat::agregarMensaje(Conversacion& conv, const MensajeVista& m) {
     }
 }
 
-// La conversacion a la que pertenece un mensaje (ambito + clave, como las manda el servidor).
+// La conversacoin a la que le toca un mensaje (ambito + clave, igual que las manda el servidor).
 Conversacion* Chat::buscar(const string& ambito, const string& clave) {
     if (ambito == "G") {
         return &general;
@@ -205,12 +205,12 @@ void Chat::procesar(const string& linea) {
         try { id = stoll(c[3]); } catch (...) { return; }
 
         if (conv == nullptr || id <= conv->ultimoId) {
-            return; // conversacion desconocida o mensaje repetido
+            return; // conversacion que no existe o mensaje repetido
         }
 
         conv->ultimoId = id;
-        // Los historiales ya leidos, y los mensajes escritos por mi,
-        // no producen puntos de notificacion.
+        // Los historiales que ya lei, y los mensajes que escribi yo,
+        // no prenden los puntitos de notificacion.
         if (c[5] != yo && id > conv->ultimoLeido) conv->nuevos = true;
         verUsuario(c[5]);
 
@@ -242,7 +242,7 @@ void Chat::procesar(const string& linea) {
 
         for (auto& mensaje : conv->mensajes) {
             if (mensaje.id == id && !mensaje.eliminado) {
-                mensaje.texto.clear(); // eliminar el contenido de la memoria local
+                mensaje.texto.clear(); // borramos el contenido de la memoria local
                 mensaje.eliminado = true;
                 reconstruir(*conv);
                 break;
@@ -294,7 +294,7 @@ void Chat::procesar(const string& linea) {
 
         if (nuevo) {
             ordenGrupos.push_back(g[1]);
-            // Agregar una sala a la lista no equivale a recibir un mensaje.
+            // Agregar una sala a la lista no es lo mismo que recibir un mensaje.
         }
 
     } else if (cmd == "CANAL") {
@@ -332,7 +332,7 @@ void Chat::procesar(const string& linea) {
             it->second.miembrosCanalCargados = true;
 
     } else if ((cmd == "GRUPO_QUITADO" || cmd == "GRUPO_ELIMINADO") && c.size() >= 2) {
-        // Si sali, me expulsaron o eliminaron el grupo, no debo conservar su historial.
+        // Si me sali, me corrieron o borraron el grupo, ya no hay que guardar su historial.
         grupos.erase(c[1]);
         ordenGrupos.erase(remove(ordenGrupos.begin(), ordenGrupos.end(), c[1]), ordenGrupos.end());
         aviso = (cmd == "GRUPO_QUITADO") ? "Ya no perteneces a ese grupo." : "Se elimino un grupo.";
@@ -346,8 +346,8 @@ void Chat::procesar(const string& linea) {
 
     } else if (cmd == "CUENTA_BORRADA" && c.size() >= 2) {
         const string& usuario = c[1];
-        // SQLite elimina en cascada todos los mensajes del usuario en todas las salas.
-        // Reflejamos la misma limpieza en las conversaciones abiertas.
+        // SQLite borra en cascada todos los mensajes del usuario en todas las salas.
+        // Aqui hacemos la misma limpieza en las conversaciones que estan abiertas.
         auto limpiarMensajes = [&](Conversacion& conv) {
             size_t antes = conv.mensajes.size();
             conv.mensajes.erase(remove_if(conv.mensajes.begin(), conv.mensajes.end(),

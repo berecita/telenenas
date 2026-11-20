@@ -6,7 +6,7 @@
 #include <vector>
 
 // ---------------------------------------------------------------------
-// Acceso a SQL Server con una conexion ODBC protegida por mutex.
+// Acceso a SQL Server con una conexion ODBC protegida con mutex.
 #include <sql.h>
 
 struct MensajeGuardado {
@@ -41,7 +41,7 @@ private:
 
     using Fila = std::vector<std::string>;
 
-    // Helpers SIN mutex (los metodos publicos ya lo tienen tomado).
+    // Helpers SIN mutex (los metodos publcos ya lo tienen agarrado).
     bool ejec(const std::string& sql, const std::vector<std::string>& params = {},
               long long* ultimoId = nullptr);
     std::vector<Fila> cons(const std::string& sql, const std::vector<std::string>& params = {});
@@ -54,10 +54,10 @@ public:
     bool abrir(const std::string& ruta);
 
     // ---- usuarios ----
-    // avatar: "" (ninguno), "foto" (foto propia, en `foto` en base64) o el nombre de un animal.
+    // avatar: "" (ninguno), "foto" (foto propia, va en `foto` en base64) o el nombre de un animal.
     bool crearUsuario(const std::string& nombre, const std::string& clave,
                       const std::string& avatar, const std::string& foto);
-    // Regresa false si no existe. `nombreReal` trae las mayusculas con que se registro.
+    // Regresa false si no existe. `nombreReal` trae las mayusculas con las que se registro.
     bool credenciales(const std::string& nombre, std::string& nombreReal, std::string& clave);
     bool lecturasInicializadas(const std::string& usuario);
     bool finalizarLecturasIniciales(const std::string& usuario);
@@ -68,10 +68,10 @@ public:
                                   const std::string& clave);
     std::string nombreCanonico(const std::string& nombre); // "" si no existe
     bool perfil(const std::string& nombre, std::string& avatar, std::string& foto);
-    bool eliminarCuenta(const std::string& usuario); // elimina tambien sus salas mediante CASCADE
+    bool eliminarCuenta(const std::string& usuario); // borra tambien sus salas con CASCADE
 
     // ---- mensajes ----
-    // Guarda el mensaje y rellena m.id y m.fecha (la fecha la pone la base de datos).
+    // Guarda el mensaje y llena m.id y m.fecha (la fecha la pone la base de datos).
     bool guardarMensaje(MensajeGuardado& m);
     bool mensaje(long long id, MensajeGuardado& salida);
     bool borrarMensaje(long long id);

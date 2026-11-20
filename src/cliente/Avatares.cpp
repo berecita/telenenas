@@ -13,7 +13,7 @@ static std::string minusculas(std::string s) {
 }
 
 bool prepararFoto(const std::string& rutaCruda, std::string& base64, std::string& error) {
-    // Windows "Copiar como ruta" la entrega entre comillas.
+    // En Windows "Copiar como ruta" la da entre comillas, hay que quitarselas.
     std::string ruta = rutaCruda;
     if (ruta.size() >= 2 && ruta.front() == '"' && ruta.back() == '"') {
         ruta = ruta.substr(1, ruta.size() - 2);
@@ -35,11 +35,11 @@ bool prepararFoto(const std::string& rutaCruda, std::string& base64, std::string
         return false;
     }
 
-    // Recorte cuadrado centrado.
+    // Recortamos cuadrado y al centro.
     const unsigned int x0 = (ancho - lado) / 2;
     const unsigned int y0 = (alto - lado) / 2;
 
-    // Reducir a 64x64 promediando los pixeles de cada bloque (se ve mejor que saltarse pixeles).
+    // Se reduce a 64x64 sacando el promedaindo de los pixeles de cada bloque (se ve mas bonito que nomas saltarse pixeles).
     std::vector<sf::Uint8> pixeles(FOTO_BYTES);
 
     for (int py = 0; py < FOTO_LADO; py++) {
@@ -80,7 +80,7 @@ static bool cargarRecurso(sf::Texture& textura, const std::string& relativa) {
     std::vector<std::string> candidatas;
 
 #ifdef RECURSOS_DIR
-    candidatas.push_back(std::string(RECURSOS_DIR) + "/" + relativa); // ruta absoluta desde CMake
+    candidatas.push_back(std::string(RECURSOS_DIR) + "/" + relativa); // ruta absoluta que viene desde CMake
 #endif
     candidatas.push_back("recursos/" + relativa);
     candidatas.push_back("../recursos/" + relativa);
@@ -126,7 +126,7 @@ void Avatares::recibir(const std::string& usuario, const std::string& perfil) {
     std::string clave = minusculas(usuario);
     pedidas.insert(clave);
 
-    // Avatar predeterminado: se reutiliza la imagen ya cargada.
+    // Avatar de default: reusamos la imagen que ya estaba cargada.
     if (perfil.rfind("animal:", 0) == 0) {
         auto it = predeterminados.find(perfil.substr(7));
 
@@ -162,19 +162,19 @@ void Avatares::recibir(const std::string& usuario, const std::string& perfil) {
     }
 }
 
-// Dibuja la textura recortada en circulo; si no hay, un circulo de color con la inicial.
+// Dibuja la textura recortada en circulo; si no hay, pone un circulo de color con la inicial.
 void Avatares::dibujarCirculo(Ventana& ventana, const sf::Texture* textura, float x, float y,
                               float diametro, const std::string& nombre) {
     sf::CircleShape circulo(diametro / 2.0f);
     circulo.setPosition(x, y);
 
     if (textura != nullptr) {
-        circulo.setTexture(textura, true); // la imagen cuadrada se ve recortada en circulo
+        circulo.setTexture(textura, true); // la imagen cuadrada se ve recortada como circulo
         ventana.getWindow().draw(circulo);
         return;
     }
 
-    // Colores rosas/lilas, uno por nombre.
+    // Colores rosas/lilas, uno por cada nombre.
     static const sf::Color PALETA[] = {
         sf::Color(214, 82, 170), sf::Color(150, 110, 210), sf::Color(235, 110, 140), sf::Color(190, 90, 200),
         sf::Color(240, 130, 180), sf::Color(120, 130, 220), sf::Color(220, 100, 120), sf::Color(170, 100, 170)};
@@ -185,7 +185,7 @@ void Avatares::dibujarCirculo(Ventana& ventana, const sf::Texture* textura, floa
     circulo.setFillColor(PALETA[suma % 8]);
     ventana.getWindow().draw(circulo);
 
-    // Inicial (primer caracter UTF-8 completo).
+    // La inicial (primer caracter UTF-8 completito).
     std::string inicial;
 
     if (!nombre.empty()) {
