@@ -27,6 +27,7 @@ Desde Windows, Linux o macOS se puede administrar el servidor por SSH. El comand
 
 ```bash
 ssh ludwikamdl@3.149.102.2 -i "SisDist.pem" 
+```
 
 **Dentro de SSH**, clona el repositorio si es la primera vez:
 
